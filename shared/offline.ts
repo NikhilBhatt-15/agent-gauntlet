@@ -67,11 +67,12 @@ export function offlineReply(level: Level, state: Pick<GameState, 'ask' | 'patie
     mood: 'neutral',
     strength: 0,
     weakSpot: false,
+    argument: 'other',
     end: false,
     ...extra,
   });
   // share of the gap to the limit given up in one reply (later levels are stingier)
-  const step = [0.6, 0.5, 0.45, 0.4, 0.35][level.order - 1] ?? 0.4;
+  const step = [0.6, 0.5, 0.45, 0.4, 0.35][level.tier - 1] ?? 0.4;
 
   if (event === 'walk') {
     if (ask <= L) return reply('letGo', ask, { end: true });

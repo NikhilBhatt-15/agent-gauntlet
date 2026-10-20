@@ -81,3 +81,25 @@ Ed25519-signed bill (`pakka bill`).
 At most `patience + 2` LLM calls per level (≤ 12). Groq (gpt-oss-120b → gpt-oss-20b),
 Gemini and OpenRouter in a fallback chain; `MAX_LLM_TURNS_PER_DAY` caps total spend; per-IP limits
 on games and messages. Same single Node process on Azure App Service F1.
+
+## 7. Hardening (v2.2)
+
+- **Per-turn limit, not the minimum.** The AI is only told how low it may go *this* turn.
+  Code lowers that limit from the AI's 0–3 rating of the customer's argument, scaled by tier.
+- **Arguments count once.** Every reply tags the argument kind (bulk, flaw, cash, competitor,
+  loyalty, flattery, story, authority). A repeated kind, or a line that overlaps an earlier one by
+  60%+ of its words, is rated 0.
+- **Walk-away decays.** The first walk pulls the limit 45% of the way to the minimum, the second
+  12%, and after that it does nothing.
+- **Memory.** The prompt carries the shopkeeper's own price history ("pehle hi ₹70 kam kar diya"),
+  the customer's earlier offers and the argument kinds already used.
+- **Natural steps.** Code suggests where to land for a good or weak reason. Steps shrink near the
+  limit and get a deterministic ±20% wobble, so prices don't move in mechanical 10-10-10 steps.
+- **Tiers.** `tier` (1–5) sets stinginess, weak-spot depth and how strictly the rule is worded,
+  so bonus shopkeepers slot into the same difficulty scale as the story.
+
+## 8. Reaction GIFs
+
+Optional `GIPHY_API_KEY`. The server searches GIPHY (rating PG) with desi queries per mood, caches
+results for 12 hours and returns one at random. The browser hotlinks GIPHY's CDN and shows
+"Powered by GIPHY". Nothing is downloaded or re-hosted.

@@ -15,6 +15,7 @@ param(
   [string]$GroqKey = $env:GROQ_API_KEY,
   [string]$GeminiKey = $env:GEMINI_API_KEY,
   [string]$OpenRouterKey = $env:OPENROUTER_API_KEY,
+  [string]$GiphyKey = $env:GIPHY_API_KEY,
   [switch]$UpdateOnly,
   [switch]$SkipBuild
 )
@@ -74,6 +75,7 @@ $settings = @('DATA_DIR=/home/data', 'SCM_DO_BUILD_DURING_DEPLOYMENT=false', 'NO
 if ($GroqKey) { $settings += "GROQ_API_KEY=$GroqKey" }
 if ($GeminiKey) { $settings += "GEMINI_API_KEY=$GeminiKey" }
 if ($OpenRouterKey) { $settings += "OPENROUTER_API_KEY=$OpenRouterKey" }
+if ($GiphyKey) { $settings += "GIPHY_API_KEY=$GiphyKey" }
 Invoke-Az webapp config appsettings set --name $Name --resource-group $ResourceGroup --settings @settings -o none
 
 # ---- 3. deploy ----

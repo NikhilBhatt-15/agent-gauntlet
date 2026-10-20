@@ -111,7 +111,7 @@ export function Portrait({
           height={size}
           draggable={false}
           // small portraits zoom in on the face so the expression stays readable
-          style={{ display: 'block', width: '100%', height: '100%', transform: size < 60 ? 'translateY(16%) scale(1.5)' : 'translateY(7%) scale(1.12)' }}
+          style={{ display: 'block', width: '100%', height: '100%', transform: who === 'bot' ? 'scale(0.92)' : size < 60 ? 'translateY(16%) scale(1.5)' : 'translateY(7%) scale(1.12)' }}
         />
       </motion.div>
       <AnimatePresence>

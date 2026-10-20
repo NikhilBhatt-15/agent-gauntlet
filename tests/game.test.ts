@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseRupees, rupees } from '../shared/format.ts';
-import { newGame, nextLimit, playerAccepts, playerSays, playerWalks, sanitizeReply, type Agents, type KeeperAgent, type KeeperReply } from '../shared/game.ts';
+import { newGame, nextLimit, suggestedCounters, playerAccepts, playerSays, playerWalks, sanitizeReply, type Agents, type KeeperAgent, type KeeperReply } from '../shared/game.ts';
 import { getLevel, LEVELS, publicLevel } from '../shared/levels.ts';
 import { OfflineKeeper, offlineReply } from '../shared/offline.ts';
 import { keeperMessages } from '../shared/prompts.ts';
@@ -9,7 +9,7 @@ import { scoreDeal } from '../shared/scoring.ts';
 /** A keeper that plays back scripted replies. */
 function scripted(replies: Partial<KeeperReply>[]): KeeperAgent {
   let i = 0;
-  return { mode: 'llm', model: 'scripted', turn: async () => ({ reply: 'ok', price: 0, accept: false, mood: 'neutral', strength: 0, weakSpot: false, end: false, ...replies[i++] }) as KeeperReply };
+  return { mode: 'llm', model: 'scripted', turn: async () => ({ reply: 'ok', price: 0, accept: false, mood: 'neutral', strength: 0, weakSpot: false, argument: 'other', end: false, ...replies[i++] }) as KeeperReply };
 }
 
 function agents(keeper: KeeperAgent, munimApproves = false): Agents {
@@ -47,14 +47,30 @@ describe('rupees', () => {
 });
 
 describe('levels', () => {
-  it('are well-formed and get harder', () => {
-    LEVELS.forEach((l, i) => {
-      expect(l.order).toBe(i + 1);
+  it('are well-formed; the story gets harder; defences follow the tier', () => {
+    const ids = new Set<string>();
+    for (const l of LEVELS) {
+      expect(ids.has(l.id), l.id).toBe(false);
+      ids.add(l.id);
       expect(l.costPrice).toBeLessThan(l.floorPrice);
       expect(l.floorPrice).toBeLessThan(l.askingPrice);
-      expect(l.defences.length).toBe(Math.min(i, 4));
-    });
-    expect(LEVELS.filter((l) => l.munim).map((l) => l.id)).toEqual(['swift', 'flat']);
+      expect(l.defences.length, l.id).toBe(Math.min(l.tier - 1, 4));
+      expect(l.tier).toBeGreaterThanOrEqual(1);
+      expect(l.tier).toBeLessThanOrEqual(5);
+    }
+    const story = LEVELS.filter((l) => !l.extra);
+    expect(story.map((l) => l.tier)).toEqual([1, 2, 3, 4, 5]);
+    expect(LEVELS.filter((l) => l.extra).length).toBeGreaterThanOrEqual(5);
+    expect(LEVELS.filter((l) => l.munim).map((l) => l.id)).toEqual(['swift', 'flat', 'caterer', 'bot']);
+    // tier-5 shopkeepers have no weak spot
+    for (const l of LEVELS.filter((x) => x.tier === 5)) expect(l.keeper.weakness, l.id).toBeNull();
+  });
+  it('every shopkeeper has portraits for every mood and an item icon', async () => {
+    const fs = await import('node:fs');
+    for (const l of LEVELS) {
+      for (const m of ['happy', 'neutral', 'annoyed', 'angry', 'impressed', 'suspicious']) expect(fs.existsSync(`web/public/avatars/${l.keeper.avatar}-${m}.svg`), `${l.id} ${m}`).toBe(true);
+      expect(fs.existsSync(`web/public/fluent/${l.item.icon}.png`), l.item.icon).toBe(true);
+    }
   });
   it('never leak the minimum or cost to the browser', () => {
     for (const l of LEVELS) {
@@ -94,6 +110,48 @@ describe('sanitizeReply', () => {
     expect(sanitizeReply({ reply: 'x', price: Number.NaN }, 48000).price).toBe(48000);
     expect(sanitizeReply({ reply: 'x', mood: 'furious' as never }, 1).mood).toBe('neutral');
     expect(sanitizeReply(null, 5).reply).toBe('...');
+  });
+});
+
+describe('hardening', () => {
+  it('repeated lines and repeated kinds of argument earn nothing', async () => {
+    const l = getLevel('chai')!;
+    const g = newGame(l, 'h1', scripted([]));
+    const good = () => agents(scripted([{ reply: 'hmm', price: 500, strength: 3, argument: 'bulk' }]));
+    await playerSays(g, l, 'Roz ka order pakka, poora office', good());
+    const afterFirst = g.limit!;
+    expect(afterFirst).toBeLessThan(482);
+    await playerSays(g, l, 'Roz ka order pakka, poora office!', good()); // same line
+    expect(g.limit).toBe(afterFirst);
+    await playerSays(g, l, 'Har mahine 300 cup lunga bhai', good()); // same kind (bulk), new words
+    expect(g.limit).toBe(afterFirst);
+    await playerSays(g, l, 'Bagal wali tapri 350 leti hai', agents(scripted([{ reply: 'hmm', price: 500, strength: 3, argument: 'competitor' }])));
+    expect(g.limit!).toBeLessThan(afterFirst);
+  });
+  it('walking away works once, barely twice', async () => {
+    const l = getLevel('kurti')!;
+    const g = newGame(l, 'h2', scripted([]));
+    const a = (price: number) => agents(scripted([{ reply: 'ruko!', price }]));
+    const l0 = g.limit!;
+    await playerWalks(g, l, a(1000));
+    const l1 = g.limit!;
+    await playerWalks(g, l, a(950));
+    const l2 = g.limit!;
+    await playerWalks(g, l, a(940));
+    const l3 = g.limit!;
+    expect(l0 - l1).toBeGreaterThan(3 * (l1 - l2));
+    expect(l3).toBe(l2);
+  });
+  it('suggested counters shrink as the shopkeeper nears his limit', () => {
+    const l = getLevel('iphone')!;
+    const g = newGame(l, 'h3', scripted([]));
+    g.limit = 44000;
+    const far = suggestedCounters(g);
+    g.ask = 44500;
+    const near = suggestedCounters(g);
+    expect(48000 - far.good).toBeGreaterThan(44500 - near.good);
+    expect(far.weak).toBeGreaterThan(far.good);
+    expect(near.good).toBeGreaterThanOrEqual(44000);
   });
 });
 

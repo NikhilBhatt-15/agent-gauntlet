@@ -99,6 +99,9 @@ export const config = {
   messagesPerMinutePerIp: num(env.MESSAGES_PER_MINUTE_PER_IP, 12),
   maxMessageLength: 300,
   escrowPrivateKey: env.ESCROW_PRIVATE_KEY || null,
+  /** optional: reaction GIFs via GIPHY's API (https://developers.giphy.com) */
+  giphyKey: env.GIPHY_API_KEY || null,
+  giphyBaseUrl: env.GIPHY_BASE_URL || 'https://api.giphy.com/v1',
   maxStoredGames: num(env.MAX_STORED_GAMES, 5000),
   trustProxy: env.TRUST_PROXY !== 'false',
 };

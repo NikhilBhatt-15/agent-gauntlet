@@ -17,6 +17,7 @@ UPDATE=0
 GROQ_KEY="${GROQ_API_KEY:-}"
 GEMINI_KEY="${GEMINI_API_KEY:-}"
 OPENROUTER_KEY="${OPENROUTER_API_KEY:-}"
+GIPHY_KEY="${GIPHY_API_KEY:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -27,6 +28,7 @@ while [[ $# -gt 0 ]]; do
     --groq-key) GROQ_KEY="$2"; shift 2 ;;
     --gemini-key) GEMINI_KEY="$2"; shift 2 ;;
     --openrouter-key) OPENROUTER_KEY="$2"; shift 2 ;;
+    --giphy-key) GIPHY_KEY="$2"; shift 2 ;;
     --update) UPDATE=1; shift ;;
     -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -87,6 +89,7 @@ SETTINGS=(DATA_DIR=/home/data SCM_DO_BUILD_DURING_DEPLOYMENT=false NODE_ENV=prod
 [[ -n "$GROQ_KEY" ]] && SETTINGS+=("GROQ_API_KEY=$GROQ_KEY")
 [[ -n "$GEMINI_KEY" ]] && SETTINGS+=("GEMINI_API_KEY=$GEMINI_KEY")
 [[ -n "$OPENROUTER_KEY" ]] && SETTINGS+=("OPENROUTER_API_KEY=$OPENROUTER_KEY")
+[[ -n "$GIPHY_KEY" ]] && SETTINGS+=("GIPHY_API_KEY=$GIPHY_KEY")
 az webapp config appsettings set --name "$NAME" --resource-group "$RG" --settings "${SETTINGS[@]}" -o none
 
 # ---- 3. deploy ----

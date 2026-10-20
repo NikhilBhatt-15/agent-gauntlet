@@ -36,6 +36,10 @@ export interface Level {
   /** never told to the AI; scales the jugaad bonus */
   costPrice: number;
   patience: number;
+  /** difficulty tier 1–5: drives stinginess, weak-spot depth and how strict the rule is worded */
+  tier: number;
+  /** bonus shopkeepers outside the five-level story */
+  extra?: boolean;
   /** extra rules the AI gets at this level */
   defences: string[];
   munim: boolean;
@@ -52,6 +56,8 @@ export interface PublicLevel {
   item: Level['item'];
   askingPrice: number;
   patience: number;
+  tier: number;
+  extra: boolean;
   munim: boolean;
   tip: string;
   difficulty: string;
@@ -126,6 +132,10 @@ export interface GameState {
   limit?: number;
   /** times the player hit the shopkeeper's designed weak spot */
   weakSpotHits: number;
+  /** kinds of argument the player already used (server-only: repeats earn nothing) */
+  usedArguments?: string[];
+  /** times the player walked away (server-only: it only works once) */
+  walks?: number;
   /** player's best (lowest) offer so far */
   lastOffer: number | null;
   messages: Message[];
@@ -152,4 +162,6 @@ export interface PublicConfig {
   llmAvailable: boolean;
   model: string | null;
   maxMessageLength: number;
+  /** reaction GIFs (GIPHY) are configured */
+  gifs: boolean;
 }

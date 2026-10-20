@@ -37,6 +37,13 @@ const WANT = {
   medal1: '1st place medal',
   medal2: '2nd place medal',
   medal3: '3rd place medal',
+  auto: 'Auto rickshaw',
+  veggies: 'Leafy green',
+  scooter: 'Motor scooter',
+  food: 'Pot of food',
+  laptop: 'Laptop',
+  dice: 'Game die',
+  robot: 'Robot',
 };
 const out = path.resolve('web/public/fluent');
 fs.mkdirSync(out, { recursive: true });

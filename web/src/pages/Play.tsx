@@ -4,10 +4,11 @@ import type { GameState, PublicLevel } from '../../../shared/types.ts';
 import { Fluent, Portrait } from '../components/Art.tsx';
 import { Chat } from '../components/Chat.tsx';
 import { Confetti } from '../components/Confetti.tsx';
+import { GifReaction } from '../components/GifReaction.tsx';
 import { ResultModal } from '../components/Result.tsx';
 import { api, progress, tokens } from '../lib/api.ts';
 import { linkProps } from '../lib/router.ts';
-import { MOOD, QUICK, QUICK_COMMON } from '../lib/ui.ts';
+import { MOOD, QUICK_COMMON } from '../lib/ui.ts';
 
 const currentKey = (levelId: string) => `molbhav.current.${levelId}`;
 
@@ -20,11 +21,20 @@ export function PlayPage({ levelId }: { levelId: string }) {
   const [showResult, setShowResult] = useState(false);
   const [animateFrom, setAnimateFrom] = useState(Infinity);
   const [hint, setHint] = useState(false);
+  const [gifsOn, setGifsOn] = useState(false);
   const started = useRef<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   const level = levels.find((l) => l.id === levelId);
-  const next = level ? (levels.find((l) => l.order === level.order + 1) ?? null) : null;
+  // story levels lead to the next one; bonus shopkeepers lead to a random other bonus one
+  const next = level
+    ? level.extra
+      ? (() => {
+          const others = levels.filter((l) => l.extra && l.id !== level.id);
+          return others[(state?.id.charCodeAt(0) ?? 0) % Math.max(1, others.length)] ?? null;
+        })()
+      : (levels.find((l) => !l.extra && l.order === level.order + 1) ?? null)
+    : null;
   const token = state ? tokens.get(state.id) : null;
 
   const startNew = useCallback(async () => {
@@ -51,6 +61,7 @@ export function PlayPage({ levelId }: { levelId: string }) {
     started.current = levelId;
     setState(null);
     api.levels().then(setLevels).catch((e) => setError(e.message));
+    api.config().then((c) => setGifsOn(c.gifs)).catch(() => {});
     let id: string | null = null;
     try {
       id = sessionStorage.getItem(currentKey(levelId));
@@ -235,6 +246,7 @@ export function PlayPage({ levelId }: { levelId: string }) {
             {dropPct > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)' }}>−{dropPct}%</div>}
           </div>
         </div>
+        <GifReaction kind={moodKey === 'neutral' ? null : moodKey} trigger={animateFrom === Infinity ? 0 : beat} enabled={gifsOn && open} />
         <div className="chat-scroll">
           <Chat level={level} messages={state.messages} typing={busy} animateFrom={animateFrom} />
         </div>
@@ -242,9 +254,9 @@ export function PlayPage({ levelId }: { levelId: string }) {
           {error && <div className="error-box">{error}</div>}
           {open ? (
             <>
-              {canSpeak && (
+              {canSpeak && state.messages.filter((m) => m.from === 'player').length < 2 && (
                 <div className="quick" aria-label="Quick replies">
-                  {[...(QUICK[level.id] ?? []), ...QUICK_COMMON].map((q) => (
+                  {QUICK_COMMON.map((q) => (
                     <button key={q} onClick={() => act('say', q)} disabled={busy}>
                       {q}
                     </button>

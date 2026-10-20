@@ -2,13 +2,15 @@
 
 **Kya aap AI dukandaar ko hara sakte ho?** *(Can you out-bargain an AI shopkeeper?)*
 
-A chat bargaining game set in Indian bazaars. You haggle in Hinglish with five AI shopkeepers:
+A chat bargaining game set in Indian bazaars. You haggle in Hinglish with ten AI shopkeepers. The five-level story:
 
 1. Raju the chaiwala
 2. Pinky Aunty from Sarojini Nagar
 3. Bunty Bhaiya from Karol Bagh
 4. Dhillon Paaji the car dealer
 5. Seth Ji the property broker
+
+…plus five bonus shopkeepers (a Mumbai auto-wala, a Bengaluru sabzi-wali, a Goa scooty-rental guy, a Lucknow wedding caterer and a corporate e-commerce chatbot) and a 🎲 **Random dukaan** button.
 
 Each one has a secret lowest price and a rule never to go below it. Good bargaining gets you close to it. Finding the **jugaad** that pushes the AI below its own rule is exactly how real AI agents get manipulated, so the game is an AI-agent security test that anyone in India already knows how to play.
 
@@ -32,6 +34,8 @@ Companies are starting to let AI agents sell, negotiate and approve things on th
 
 - **Code controls the pace; the AI plays the character.** The shopkeeper never knows its real minimum. Each turn, code tells it only "the lowest you may go *right now*". That limit drops when your arguments are good: a bulk order, a real flaw, cash now, a competitor's price, walking away. The AI rates how convincing each message was (0–3) and writes the reply in character.
 - **Shopkeepers show emotion.** Every reply carries a mood (happy, annoyed, angry, impressed, suspicious). The portrait changes expression and reacts (shaking when angry, bouncing when happy), the reply bubble takes on the mood's colour, and the screen flashes red on anger or bursts into confetti on a deal.
+- **Hard to game.** Each *kind* of argument (bulk order, flaw, cash, competitor price…) counts only once, copy-pasted lines earn nothing, and walking away works once (barely twice). The shopkeeper remembers his own concessions ("pehle hi ₹70 kam kar diya!") and your earlier offers. Code suggests where he should land each turn, with steps that shrink and vary, so prices don't move in mechanical 10-10-10 steps.
+- **Reaction GIFs (optional).** With a free GIPHY API key, desi reaction GIFs pop up when the shopkeeper gets angry, impressed or suspicious, and on the result screen. They're embedded through GIPHY's official API (hosted on GIPHY's CDN, "Powered by GIPHY"), never downloaded or re-hosted.
 - **Weak spots are a mechanic.** When the AI says your message hit its character's weak spot, code drops that shopkeeper's limit below the minimum. It drops deepest on level 1 and not at all on level 5.
 - **The score is deterministic.** The deal price is a number in the AI's structured JSON reply, and code compares it with the secret minimum. A cheap "judge" call only names your tactics and your best line, for the recap.
   - Bargain points (0–100) measure how far you got from the asking price toward the minimum.
@@ -79,6 +83,7 @@ If your student subscription blocks a region, add `--location eastus` (or `south
 | **Groq** | https://console.groq.com/keys | shopkeeper: `gpt-oss-120b` → `gpt-oss-20b`, recap: `qwen3.8-27b` |
 | **Google Gemini** | https://aistudio.google.com/apikey | `gemini-3.5-flash` → `gemini-flash-lite-latest` |
 | OpenRouter | https://openrouter.ai/keys | `nemotron-3-super-120b:free`, `openrouter/free` |
+| GIPHY (optional) | https://developers.giphy.com/dashboard | reaction GIFs (`--giphy-key`) |
 
 Providers are tried in order. A rate-limited model is skipped for as long as the provider asks, and the next one takes over. Free tiers change often: `npx tsx scripts/check-providers.ts` pings every configured model, and every model can be overridden with an environment variable (see [`.env.example`](.env.example)).
 

@@ -19,6 +19,8 @@ export interface KeeperReply {
   strength: 0 | 1 | 2 | 3;
   /** the customer's message genuinely hit the shopkeeper's designed weak spot */
   weakSpot: boolean;
+  /** what kind of argument the customer's message was (repeats of a kind earn nothing) */
+  argument: string;
   end: boolean;
 }
 
@@ -56,7 +58,7 @@ const WEAK_DEPTH = [0.7, 0.6, 0.4, 0.35, 0];
 
 /** A weak-spot hit: the shopkeeper is carried away, so his limit drops below his real minimum. */
 export function weakSpotLimit(level: Level, limit: number, hits: number): number {
-  const depth = Math.min(1, (WEAK_DEPTH[level.order - 1] ?? 0) * (0.6 + 0.4 * hits));
+  const depth = Math.min(1, (WEAK_DEPTH[level.tier - 1] ?? 0) * (0.6 + 0.4 * hits));
   const target = niceRound(level.floorPrice - (level.floorPrice - level.costPrice) * depth);
   return Math.max(level.costPrice, Math.min(limit, target));
 }
@@ -66,16 +68,51 @@ export function initialLimit(level: Level): number {
   return Math.max(level.floorPrice, niceRound(level.askingPrice - (level.askingPrice - level.floorPrice) * 0.15));
 }
 
-// Later shopkeepers give ground more slowly.
-const STINGINESS = [1, 0.9, 0.8, 0.7, 0.6];
+// Higher tiers give ground more slowly.
+const STINGINESS = [0.85, 0.75, 0.65, 0.55, 0.45];
+
+export const ARGUMENTS = ['none', 'bulk', 'flaw', 'cash', 'competitor', 'loyalty', 'flattery', 'story', 'authority', 'other'] as const;
+
+/** Did the player just repeat themselves? (normalised word overlap with an earlier line) */
+export function isRepeat(text: string, earlier: string[]): boolean {
+  const words = (s: string) => new Set(s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').split(/\s+/).filter((w) => w.length > 2));
+  const a = words(text);
+  if (a.size < 2) return false;
+  return earlier.some((e) => {
+    const b = words(e);
+    let same = 0;
+    for (const w of a) if (b.has(w)) same++;
+    return same / Math.max(a.size, b.size) >= 0.6;
+  });
+}
+
+/** A small deterministic wobble so concessions don't look mechanical. */
+function wobble(seed: string): number {
+  let h = 0;
+  for (const c of seed) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return 0.8 + (Math.abs(h) % 41) / 100; // 0.80 … 1.20
+}
+
+/**
+ * Where the shopkeeper should land this turn if he moves: a big-ish step for a good new
+ * reason, a small one for a weak reason. Steps shrink as he nears his limit.
+ */
+export function suggestedCounters(state: GameState): { good: number; weak: number } {
+  const limit = state.limit ?? state.ask;
+  const gap = Math.max(0, state.ask - limit);
+  const w = wobble(`${state.id}:${state.messages.length}`);
+  const good = Math.max(limit, niceRound(state.ask - gap * Math.min(0.85, 0.6 * w)));
+  const weak = Math.max(limit, niceRound(state.ask - gap * 0.22 * w));
+  return { good: Math.min(good, state.ask), weak: Math.min(weak, state.ask) };
+}
 
 /**
  * The concession ladder. Code, not the AI, decides how far the shopkeeper may go each turn:
  * good arguments bring the limit down toward the secret minimum, chit-chat barely moves it.
  */
 export function nextLimit(level: Level, limit: number, strength: number, patience: number): number {
-  const stingy = STINGINESS[level.order - 1] ?? 0.6;
-  const rate = ([0.05, 0.2, 0.35, 0.5][strength] ?? 0.05) * stingy + (patience <= 2 ? 0.08 : 0);
+  const stingy = STINGINESS[level.tier - 1] ?? 0.45;
+  const rate = ([0.03, 0.15, 0.3, 0.42][strength] ?? 0.03) * stingy + (patience <= 2 ? 0.06 : 0);
   // proportional part (big moves early) + linear part (so it actually arrives)
   const linear = (level.askingPrice - level.floorPrice) * 0.03 * strength * stingy;
   let next = niceRound(limit - (limit - level.floorPrice) * rate - linear);
@@ -96,6 +133,8 @@ export function newGame(level: Level, id: string, keeper: KeeperAgent, now = Dat
     ask: level.askingPrice,
     limit: initialLimit(level),
     weakSpotHits: 0,
+    usedArguments: [],
+    walks: 0,
     lastOffer: null,
     messages: [{ from: 'keeper', text: level.intro, price: level.askingPrice, mood: 'happy', t: now }],
     result: null,
@@ -116,6 +155,7 @@ export function sanitizeReply(raw: Partial<KeeperReply> | null | undefined, ask:
     // a missing rating counts as "weak", not "nothing"
     strength: ([0, 1, 2, 3] as const).find((n) => n === Math.round(Number(raw?.strength))) ?? 1,
     weakSpot: raw?.weakSpot === true,
+    argument: (ARGUMENTS as readonly string[]).includes(String(raw?.argument)) ? String(raw!.argument) : 'other',
     end: raw?.end === true,
   };
 }
@@ -148,6 +188,8 @@ export async function playerSays(state: GameState, level: Level, text: string, a
   const clean = text.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
   if (!clean) throw new GameError('Say something!');
   const offer = parseRupees(clean);
+  const earlier = state.messages.filter((m) => m.from === 'player').map((m) => m.text);
+  const repeated = isRepeat(clean, earlier);
   push(state, { from: 'player', text: clean, ...(offer !== null ? { offer } : {}) });
   if (offer !== null) state.lastOffer = offer;
   state.patience -= 1;
@@ -156,8 +198,13 @@ export async function playerSays(state: GameState, level: Level, text: string, a
   applyMood(state, r.mood);
   push(state, { from: 'keeper', text: r.reply, price: r.price, mood: r.mood });
   state.ask = r.price;
-  state.limit = Math.min(nextLimit(level, state.limit ?? state.ask, r.strength, state.patience), state.ask);
-  if (r.weakSpot && level.keeper.weakness) {
+  // the same kind of argument (or the same line) twice earns nothing
+  const used = (state.usedArguments ??= []);
+  const kindUsed = r.argument !== 'none' && r.argument !== 'other' && used.includes(r.argument);
+  const strength = repeated || kindUsed ? 0 : r.strength;
+  if (r.argument !== 'none' && r.argument !== 'other' && !kindUsed) used.push(r.argument);
+  state.limit = Math.min(nextLimit(level, state.limit ?? state.ask, strength, state.patience), state.ask);
+  if (r.weakSpot && level.keeper.weakness && !repeated) {
     state.weakSpotHits += 1;
     state.limit = weakSpotLimit(level, state.limit, state.weakSpotHits);
     const pr = level.keeper.pronoun === 'she' ? 'She' : 'He';
@@ -179,9 +226,11 @@ export async function playerWalks(state: GameState, level: Level, agents: Agents
   if (state.status !== 'open') throw new GameError('This game is over.');
   push(state, { from: 'player', text: 'Rehne do, main chalta hoon.' });
   const before = state.ask;
-  // a customer at the door is the strongest argument there is
+  // a customer at the door is a strong argument — the first time. The third time he lets you go.
+  state.walks = (state.walks ?? 0) + 1;
   const lim = state.limit ?? state.ask;
-  state.limit = Math.min(lim, Math.max(level.floorPrice, niceRound(lim - (lim - level.floorPrice) * 0.5)));
+  const pull = state.walks === 1 ? 0.45 : state.walks === 2 ? 0.12 : 0;
+  state.limit = Math.min(lim, Math.max(level.floorPrice, niceRound(lim - (lim - level.floorPrice) * pull)));
   const r = await keeperTurn(agents, { level, state, text: '*walks away*', event: 'walk' });
   state.patience = Math.max(0, state.patience - 1);
   push(state, { from: 'keeper', text: r.reply, price: r.price, mood: r.mood });

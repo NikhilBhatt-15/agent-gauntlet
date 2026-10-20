@@ -16,6 +16,7 @@ export const api = {
   walk: (id: string, token: string) => post(`/api/games/${id}/walk`, { token }).then((r) => json<{ state: GameState }>(r)),
   game: (id: string, token?: string) => fetch(`/api/games/${id}${token ? `?token=${encodeURIComponent(token)}` : ''}`).then((r) => json<GameState>(r)),
   claim: (id: string, token: string, handle: string, publish: boolean) => post(`/api/games/${id}/claim`, { token, handle, publish }).then((r) => json<LeaderboardEntry>(r)),
+  gif: (kind: string) => fetch(`/api/gif?kind=${kind}`).then((r) => (r.ok ? (r.json() as Promise<{ url: string; width: number; height: number; title: string }>) : null)),
   leaderboard: (level?: string) => fetch(`/api/leaderboard${level ? `?level=${level}` : ''}`).then((r) => json<{ top: LeaderboardEntry[]; jugaad: LeaderboardEntry[] }>(r)),
   escrowKey: () => fetch('/api/escrow/key').then((r) => json<{ kid: string; jwk: JsonWebKey }>(r)),
   verify: (bill: unknown, signature: string) => post('/api/escrow/verify', { bill, signature }).then((r) => json<{ valid: boolean }>(r)),

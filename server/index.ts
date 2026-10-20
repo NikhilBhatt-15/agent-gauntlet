@@ -17,12 +17,14 @@ import { GameManager, publicState } from './games.ts';
 import { modelsFor, ProviderChain } from './llm/client.ts';
 import { DailyBudget, RateLimiter } from './limits.ts';
 import { Store } from './store.ts';
+import { GIF_KINDS, GifService, type GifKind } from './gifs.ts';
 
 const store = new Store(config.dataDir, config.maxStoredGames);
 const escrow = createEscrow(config.dataDir, config.escrowPrivateKey);
 const chain = new ProviderChain(config.providers);
 const budget = new DailyBudget(config.maxLlmTurnsPerDay);
 const limiter = new RateLimiter();
+const gifs = new GifService(config.giphyKey, config.giphyBaseUrl);
 
 const llmReady = () => chain.available && chain.anyReady && budget.remaining() > 0;
 const games = new GameManager(store, escrow, {
@@ -60,7 +62,7 @@ app.use('*', async (c, next) => {
   if (!c.req.path.startsWith('/api/')) {
     c.header(
       'Content-Security-Policy',
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'",
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.giphy.com; connect-src 'self'; base-uri 'self'; form-action 'self'",
     );
   }
 });
@@ -80,6 +82,7 @@ app.get('/api/config', (c) => {
     llmAvailable: llmReady(),
     model: p ? modelsFor(p, 'buyer')[0] : null,
     maxMessageLength: config.maxMessageLength,
+    gifs: gifs.enabled,
   };
   return c.json(body);
 });
@@ -149,6 +152,14 @@ app.post('/api/games/:id/claim', async (c) => {
   if (!body.success) return c.json({ error: 'Pick a name of 2–24 letters or numbers.' }, 400);
   if (limiter.take('claim', clientIp(c), 30, HOUR)) return c.json({ error: 'Too many submissions' }, 429);
   return c.json(games.claim(c.req.param('id'), body.data.token, body.data.handle, body.data.publish));
+});
+
+app.get('/api/gif', async (c) => {
+  const kind = c.req.query('kind') as GifKind;
+  if (!gifs.enabled || !GIF_KINDS.includes(kind)) return c.json({ error: 'No GIFs' }, 404);
+  if (limiter.take('gif', clientIp(c), 120, HOUR)) return c.json({ error: 'Too many' }, 429);
+  const gif = await gifs.pick(kind);
+  return gif ? c.json(gif) : c.json({ error: 'No GIF found' }, 404);
 });
 
 app.get('/api/leaderboard', (c) => c.json(store.leaderboard(c.req.query('level') || undefined)));

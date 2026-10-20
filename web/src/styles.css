@@ -926,3 +926,34 @@ button {
     align-items: flex-start;
   }
 }
+
+/* GIPHY reaction card, floating over the chat */
+.chat-panel {
+  position: relative;
+}
+.gif-pop {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  z-index: 8;
+  width: min(220px, 55%);
+  background: var(--paper);
+  border: 2.5px solid var(--ink);
+  border-radius: 16px;
+  box-shadow: 0 4px 0 var(--ink);
+  padding: 6px 6px 3px;
+  text-align: center;
+  cursor: pointer;
+}
+.gif-pop img {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+  margin-bottom: 2px;
+}
+@media (max-width: 939px) {
+  .gif-pop {
+    top: 70px;
+  }
+}

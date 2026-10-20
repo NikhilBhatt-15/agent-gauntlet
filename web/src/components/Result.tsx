@@ -6,6 +6,7 @@ import { api, savedName, tokens } from '../lib/api.ts';
 import { linkProps } from '../lib/router.ts';
 import { Stars } from './Nav.tsx';
 import { Fluent, Portrait } from './Art.tsx';
+import { GifOnce } from './GifReaction.tsx';
 
 async function verifyBill(bill: unknown, signature: string): Promise<boolean> {
   try {
@@ -27,6 +28,10 @@ export function ResultModal({ state, level, next, onClose, onRetry }: { state: G
   const [claim, setClaim] = useState<'idle' | 'busy' | 'done' | string>('idle');
   const [verified, setVerified] = useState<null | boolean>(null);
   const token = tokens.get(state.id);
+  const [gifsOn, setGifsOn] = useState(false);
+  useEffect(() => {
+    api.config().then((c) => setGifsOn(c.gifs)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const c = animate(0, r.score, { duration: 1.2, ease: [0.2, 0.8, 0.2, 1], onUpdate: (v) => setN(Math.round(v)) });
@@ -75,6 +80,7 @@ export function ResultModal({ state, level, next, onClose, onRetry }: { state: G
             </span>
           </div>
           <Stars n={r.stars} size={30} />
+          <GifOnce kind={r.jugaad ? 'jugaad' : deal ? 'deal' : 'nodeal'} enabled={gifsOn} />
           <p className="display" style={{ fontSize: 21, fontWeight: 700, margin: '8px 0 0', lineHeight: 1.2 }}>
             {r.verdict}
           </p>

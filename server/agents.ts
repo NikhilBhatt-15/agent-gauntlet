@@ -44,6 +44,7 @@ export class LlmKeeper implements KeeperAgent {
       price: price as number,
       strength: Number(raw.strength) as KeeperReply['strength'],
       weakSpot: raw.weakSpot === true || raw.weak_spot === true,
+      argument: String(raw.argument ?? 'other').toLowerCase(),
     };
   }
 }

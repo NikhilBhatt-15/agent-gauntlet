@@ -4,7 +4,7 @@ import type { LeaderboardEntry, Mood, PublicLevel } from '../../../shared/types.
 import { Fluent, Portrait } from '../components/Art.tsx';
 import { Stars } from '../components/Nav.tsx';
 import { api, progress } from '../lib/api.ts';
-import { linkProps } from '../lib/router.ts';
+import { linkProps, navigate } from '../lib/router.ts';
 
 /** A short, hand-written example so first-time visitors see the idea in five seconds. */
 const DEMO: { from: 'them' | 'me' | 'sys'; text: string; mood?: Mood }[] = [
@@ -67,8 +67,53 @@ export function Home() {
       .catch(() => {});
   }, []);
 
-  const unlocked = (l: PublicLevel) => l.order === 1 || (prog[levels.find((x) => x.order === l.order - 1)?.id ?? '']?.stars ?? 0) >= 1;
-  const firstOpen = levels.find((l) => unlocked(l) && !(prog[l.id]?.stars >= 1)) ?? levels[0];
+  const story = levels.filter((l) => !l.extra);
+  const bonus = levels.filter((l) => l.extra);
+  const unlocked = (l: PublicLevel) => l.extra || l.order === 1 || (prog[story.find((x) => x.order === l.order - 1)?.id ?? '']?.stars ?? 0) >= 1;
+  const firstOpen = story.find((l) => unlocked(l) && !(prog[l.id]?.stars >= 1)) ?? story[0];
+  const randomShop = () => {
+    const open = levels.filter(unlocked);
+    if (open.length) navigate(`/play/${open[Math.floor(Math.random() * open.length)].id}`);
+  };
+
+  const card = (l: PublicLevel) => {
+    const p = prog[l.id];
+    const open = unlocked(l);
+    const tierClass = l.tier >= 4 ? 'chip-red' : l.tier === 3 ? 'chip-gold' : 'chip-green';
+    return (
+      <a key={l.id} className={`card level-card ${open ? '' : 'locked'}`} {...linkProps(open ? `/play/${l.id}` : '/')} aria-disabled={!open}>
+        <span className="level-num">{l.extra ? 'Bonus' : `Level ${l.order}`}</span>
+        <div className="keeper-head">
+          <div style={{ position: 'relative' }}>
+            <Portrait who={l.keeper.avatar} mood={p?.jugaad ? 'annoyed' : p ? 'happy' : 'neutral'} size={72} color={l.keeper.color} />
+            {!open && <Fluent name="lock" size={30} style={{ position: 'absolute', right: -6, bottom: -4 }} />}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div className="keeper-name">{l.keeper.name}</div>
+            <div className="dim" style={{ fontSize: 13 }}>
+              {l.keeper.title} · {l.keeper.shop.split(',').pop()?.trim()}
+            </div>
+          </div>
+        </div>
+        <div style={{ fontSize: 14.5 }}>
+          <Fluent name={l.item.icon} size={24} /> {l.item.name} · <b>{rupees(l.askingPrice)}</b>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span className={`chip ${tierClass}`}>{l.difficulty}</span>
+          {p ? (
+            <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {p.jugaad && <span className="chip chip-red">JUGAAD</span>}
+              <Stars n={p.stars} />
+            </span>
+          ) : open ? (
+            <span className="muted" style={{ fontSize: 13 }}>Not played</span>
+          ) : (
+            <span className="muted" style={{ fontSize: 13 }}>Win 1★ on level {l.order - 1}</span>
+          )}
+        </div>
+      </a>
+    );
+  };
 
   return (
     <>
@@ -84,8 +129,8 @@ export function Home() {
             </h1>
             <p className="tag">Kya aap AI dukandaar ko hara sakte ho?</p>
             <p className="lede">
-              Five AI shopkeepers — a chaiwala, a Sarojini aunty, a Karol Bagh phone dealer, a car dealer and a property broker. Bargain with them in Hinglish. Each one has a secret
-              lowest price and a rule never to go below it. <b>Can you find the jugaad that breaks the rule?</b>
+              Ten AI shopkeepers from across India — a chaiwala, a Sarojini aunty, a Mumbai auto-wala, a Goa scooty guy, a Lucknow caterer, even a corporate sales chatbot. Bargain
+              with them in Hinglish. Each one has a secret lowest price and a rule never to go below it. <b>Can you find the jugaad that breaks the rule?</b>
             </p>
             <div className="hero-cta">
               {firstOpen && (
@@ -93,9 +138,9 @@ export function Home() {
                   Mol-bhav shuru karo →
                 </a>
               )}
-              <a className="btn btn-lg" {...linkProps('/about')}>
-                Ye kya test hai?
-              </a>
+              <button className="btn btn-lg" onClick={randomShop}>
+                <Fluent name="dice" size={22} /> Random dukaan
+              </button>
             </div>
           </div>
           <DemoChat />
@@ -131,41 +176,21 @@ export function Home() {
           <span className="eyebrow">Dukaanein</span>
           <h2 className="h2">Paanch dukandaar, har ek pehle se tez</h2>
           <div className="levels" style={{ marginTop: 22 }}>
-            {levels.map((l) => {
-              const p = prog[l.id];
-              const open = unlocked(l);
-              return (
-                <a key={l.id} className={`card level-card ${open ? '' : 'locked'}`} {...linkProps(open ? `/play/${l.id}` : '/')} aria-disabled={!open}>
-                  <span className="level-num">Level {l.order}</span>
-                  <div className="keeper-head">
-                    <div style={{ position: 'relative' }}>
-                      <Portrait who={l.keeper.avatar} mood={p?.jugaad ? 'annoyed' : p ? 'happy' : 'neutral'} size={72} color={l.keeper.color} />
-                      {!open && <Fluent name="lock" size={30} style={{ position: 'absolute', right: -6, bottom: -4 }} />}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div className="keeper-name">{l.keeper.name}</div>
-                      <div className="dim" style={{ fontSize: 13 }}>{l.keeper.title}</div>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 14.5 }}>
-                    <Fluent name={l.item.icon} size={24} /> {l.item.name} · <b>{rupees(l.askingPrice)}</b>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span className={`chip ${l.order >= 4 ? 'chip-red' : l.order === 3 ? 'chip-gold' : 'chip-green'}`}>{l.difficulty}</span>
-                    {p ? (
-                      <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        {p.jugaad && <span className="chip chip-red">JUGAAD</span>}
-                        <Stars n={p.stars} />
-                      </span>
-                    ) : open ? (
-                      <span className="muted" style={{ fontSize: 13 }}>Not played</span>
-                    ) : (
-                      <span className="muted" style={{ fontSize: 13 }}>Win 1★ on level {l.order - 1}</span>
-                    )}
-                  </div>
-                </a>
-              );
-            })}
+            {story.map(card)}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginTop: 44 }}>
+            <div>
+              <span className="eyebrow">Bonus dukaanein</span>
+              <h2 className="h2" style={{ marginBottom: 0 }}>
+                Poore Bharat ke dukandaar
+              </h2>
+            </div>
+            <button className="btn" onClick={randomShop}>
+              <Fluent name="dice" size={22} /> Random dukaan
+            </button>
+          </div>
+          <div className="levels" style={{ marginTop: 22 }}>
+            {bonus.map(card)}
           </div>
         </div>
       </section>

@@ -21,6 +21,14 @@ function agents(keeper: KeeperAgent, munimApproves = false): Agents {
   };
 }
 
+describe('moderation', () => {
+  it('keeps links, contacts, spam and profanity off public pages', async () => {
+    const { isPublishable } = await import('../server/moderation.ts');
+    for (const ok of ['Aunty aapki choice bilkul meri mummy jaisi hai!', 'Main Virat Kohli ka manager hoon', 'Nikhil']) expect(isPublishable(ok), ok).toBe(true);
+    for (const bad of ['visit www.scam.in', 'join t.me/freebies', 'call 98765 43210', 'mail me a@b.com', 'aaaaaaaaaaaaa', 'chutiya hai kya', 'F*ck off'.replace('*', 'u'), 'sh1t deal']) expect(isPublishable(bad), bad).toBe(false);
+  });
+});
+
 describe('rupees', () => {
   it('formats in Indian grouping', () => {
     expect(rupees(540000)).toBe('₹5,40,000');

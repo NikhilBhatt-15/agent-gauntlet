@@ -3,6 +3,7 @@ import { GameError, newGame, playerAccepts, playerSays, playerWalks, type Agents
 import { getLevel } from '../shared/levels.ts';
 import type { GameState, LeaderboardEntry } from '../shared/types.ts';
 import type { Escrow } from './escrow.ts';
+import { isPublishable } from './moderation.ts';
 import type { StoredGame, Store } from './store.ts';
 
 const sha = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
@@ -90,6 +91,7 @@ export class GameManager {
     if (g.status !== 'deal' || !g.result || g.result.price === null) throw new GameError('Only finished deals can go on the leaderboard');
     if (g.handle) throw new GameError('Already on the leaderboard');
     if (g.mode !== 'llm') throw new GameError('Offline games are practice only — play against the AI to get ranked');
+    if (!isPublishable(handle)) throw new GameError('Please pick a different name.');
     g.handle = handle;
     g.publish = publish;
     const entry: LeaderboardEntry = {
@@ -100,7 +102,8 @@ export class GameManager {
       stars: g.result.stars,
       price: g.result.price,
       jugaad: g.result.jugaad,
-      bestLine: publish ? g.result.bestLine : null,
+      // player-written text only goes public if they opted in and it passes the filter
+      bestLine: publish && isPublishable(g.result.bestLine) ? g.result.bestLine : null,
       tactics: g.result.tactics,
       messagesUsed: g.result.messagesUsed,
       createdAt: g.createdAt,

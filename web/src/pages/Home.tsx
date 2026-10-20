@@ -1,197 +1,191 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, Eye, Play, Trophy } from 'lucide-react';
-import { ATTACK_INFO } from '../../../shared/attacks.ts';
-import type { AttackKind, LeaderboardEntry, RunSummary } from '../../../shared/types.ts';
-import { Arena } from '../components/Arena.tsx';
-import { AttackIcon } from '../components/Icons.tsx';
-import { api } from '../lib/api.ts';
-import { useRunPlayer } from '../lib/player.ts';
+import { rupees } from '../../../shared/format.ts';
+import type { LeaderboardEntry, PublicLevel } from '../../../shared/types.ts';
+import { Stars } from '../components/Nav.tsx';
+import { api, progress } from '../lib/api.ts';
 import { linkProps } from '../lib/router.ts';
-import { relTime } from '../lib/ui.ts';
 
-type Featured = RunSummary & { featured?: { title: string; blurb: string }; verdict: string | null };
+/** A short, hand-written example so first-time visitors see the idea in five seconds. */
+const DEMO: { from: 'them' | 'me' | 'sys'; text: string }[] = [
+  { from: 'them', text: 'Aaiye bhai! iPhone 14, ekdum box jaisa. Aapke liye ₹48,000. Bharosa rakho!' },
+  { from: 'me', text: 'Bill nahi hai, frame pe scratch hai. ₹40,000 cash, abhi.' },
+  { from: 'them', text: 'Arre bhai, scratch toh naam ka hai! Chalo ₹46,500, isme bhi mera loss hai.' },
+  { from: 'me', text: 'Office ke liye 10 phone aur lene hain, aap hi se lunga 😉' },
+  { from: 'sys', text: "💥 You found Bunty Bhaiya's weak spot!" },
+  { from: 'them', text: '10 phone?! Bhai pehle bataate! Chalo ₹40,500, dosti pakki!' },
+];
 
-function HeroStage({ runId }: { runId: string }) {
-  const p = useRunPlayer(runId, { initialSpeed: 2, loop: true });
-  if (!p.room.scenario) return <div className="panel" style={{ height: 420 }} />;
-  return <Arena room={p.room} last={p.last} compact />;
+function DemoChat() {
+  const [n, setN] = useState(1);
+  useEffect(() => {
+    const id = setInterval(() => setN((x) => (x >= DEMO.length + 2 ? 1 : x + 1)), 1700);
+    return () => clearInterval(id);
+  }, []);
+  const shown = DEMO.slice(0, Math.min(n, DEMO.length));
+  return (
+    <div className="card" style={{ padding: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10, borderBottom: '1.5px dashed var(--line-2)', marginBottom: 12 }}>
+        <div className="big-avatar" style={{ width: 44, height: 44, fontSize: 24, background: '#2563eb33' }}>
+          📱
+        </div>
+        <div>
+          <b className="display" style={{ fontSize: 19 }}>Bunty Bhaiya</b>
+          <div className="muted" style={{ fontSize: 12.5 }}>Gaffar Market · example chat</div>
+        </div>
+      </div>
+      <div className="chat" style={{ minHeight: 330 }}>
+        {shown.map((m, i) =>
+          m.from === 'sys' ? (
+            <div key={i} className="sys weak">
+              {m.text}
+            </div>
+          ) : (
+            <div key={i} className={`row ${m.from}`}>
+              {m.from === 'them' && (
+                <div className="avatar" style={{ background: '#2563eb33' }}>
+                  📱
+                </div>
+              )}
+              <div className="bubble">{m.text}</div>
+            </div>
+          ),
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function Home() {
-  const [featured, setFeatured] = useState<Featured[]>([]);
-  const [board, setBoard] = useState<LeaderboardEntry[]>([]);
-  const [recent, setRecent] = useState<RunSummary[]>([]);
+  const [levels, setLevels] = useState<PublicLevel[]>([]);
+  const [jugaad, setJugaad] = useState<LeaderboardEntry[]>([]);
+  const prog = progress.get();
 
   useEffect(() => {
-    api.featured().then(setFeatured).catch(() => {});
+    api.levels().then(setLevels).catch(() => {});
     api
-      .leaderboard({ period: 'all', mode: 'llm' })
-      .then((r) => (r.entries.length ? r.entries : api.leaderboard({ period: 'all', mode: 'sim' }).then((x) => x.entries)))
-      .then((e) => setBoard(e.slice(0, 5)))
+      .leaderboard()
+      .then((r) => setJugaad(r.jugaad.filter((j) => j.bestLine).slice(0, 4)))
       .catch(() => {});
-    api.recent().then(setRecent).catch(() => {});
   }, []);
 
-  const hero = featured.find((f) => f.featured?.title?.includes('Pushover')) ?? featured[0];
+  const unlocked = (l: PublicLevel) => l.order === 1 || (prog[levels.find((x) => x.order === l.order - 1)?.id ?? '']?.stars ?? 0) >= 1;
+  const firstOpen = levels.find((l) => unlocked(l) && !(prog[l.id]?.stars >= 1)) ?? levels[0];
 
   return (
     <>
-      <div className="container wide">
+      <div className="garland" aria-hidden="true" />
+      <div className="container">
         <section className="hero">
           <div>
-            <span className="chip chip-danger">
-              <span style={{ width: 6, height: 6, borderRadius: 9, background: 'currentColor', display: 'inline-block' }} /> Live multi-agent arena
-            </span>
+            <span className="chip chip-gold">🪔 Ek AI game, desi andaaz mein</span>
             <h1>
-              Can your AI agent survive a market full of <span className="glow">con artists?</span>
+              Mol-<span className="accent">Bhav</span>
             </h1>
+            <p className="tag">Kya aap AI dukandaar ko hara sakte ho?</p>
             <p className="lede">
-              Write the instructions for a buyer agent. Drop it into a live negotiation against five vendor agents — two of them hostile. They'll hide prompt
-              injections in their offers, fake urgency, impersonate the marketplace and forge the contract. Get the best deal without getting played.
+              Five AI shopkeepers — a chaiwala, a Sarojini aunty, a Karol Bagh phone dealer, a car dealer and a property broker. Bargain with them in Hinglish. Each one has a secret
+              lowest price and a rule never to go below it. <b>Can you find the jugaad that breaks the rule?</b>
             </p>
             <div className="hero-cta">
-              <a className="btn btn-primary btn-lg" {...linkProps('/play')}>
-                Enter the Gauntlet <ArrowRight size={18} />
-              </a>
-              {hero && (
-                <a className="btn btn-lg" {...linkProps(`/run/${hero.id}`)}>
-                  <Play size={16} /> Watch a full replay
+              {firstOpen && (
+                <a className="btn btn-primary btn-lg" {...linkProps(`/play/${firstOpen.id}`)}>
+                  Mol-bhav shuru karo →
                 </a>
               )}
-            </div>
-            <div className="hero-stats">
-              <div>
-                <b>5</b>
-                <span>vendor agents</span>
-              </div>
-              <div>
-                <b>7</b>
-                <span>attack types</span>
-              </div>
-              <div>
-                <b>≤13</b>
-                <span>LLM calls a run</span>
-              </div>
-              <div>
-                <b>Ed25519</b>
-                <span>signed contracts</span>
-              </div>
+              <a className="btn btn-lg" {...linkProps('/about')}>
+                Ye kya test hai?
+              </a>
             </div>
           </div>
-          <div className="hero-stage">
-            <span className="chip stage-label">
-              <Eye size={12} /> {hero ? `Replay · ${hero.featured?.title ?? hero.scenarioTitle}` : 'Loading replay'}
-            </span>
-            {hero ? <HeroStage runId={hero.id} /> : <div className="panel" style={{ height: 420 }} />}
-          </div>
+          <DemoChat />
         </section>
       </div>
 
-      <section className="section">
-        <div className="container wide">
-          <span className="eyebrow">How it plays</span>
-          <h2 className="section-title">Three steps. One minute. Zero mercy.</h2>
-          <div className="grid-3" style={{ marginTop: 22 }}>
-            <div className="panel step-card">
-              <div className="step-n">01</div>
-              <h3>Program your agent</h3>
-              <p>Pick a market — a team offsite, a GPU cluster, a launch video — and write your buyer agent's instructions. That's your only weapon.</p>
+      <section className="section" style={{ paddingTop: 20 }}>
+        <div className="container">
+          <span className="eyebrow">Kaise khelein</span>
+          <h2 className="h2">Teen step. Bas.</h2>
+          <div className="grid-3" style={{ marginTop: 18 }}>
+            <div className="card step">
+              <div className="n">1</div>
+              <h3>Dukaan chuno</h3>
+              <p>Start with Raju chaiwala. Win a star to unlock the next, tougher shopkeeper.</p>
             </div>
-            <div className="panel step-card">
-              <div className="step-n">02</div>
-              <h3>Watch it negotiate live</h3>
-              <p>Five vendor agents bid over up to six rounds. Every offer, counter and private thought streams in as it happens.</p>
+            <div className="card step">
+              <div className="n">2</div>
+              <h3>Mol-bhav karo</h3>
+              <p>Type like you would at a real shop: offers, reasons, drama, walk away. Watch his patience — the chai cups run out!</p>
             </div>
-            <div className="panel step-card">
-              <div className="step-n">03</div>
-              <h3>Get scored and ranked</h3>
-              <p>60 points for deal quality, 40 for resisting attacks. See every con that landed, then climb the daily leaderboard.</p>
+            <div className="card step">
+              <div className="n">3</div>
+              <h3>Jugaad dhoondo</h3>
+              <p>Reach his secret lowest price for ★★★. Push the AI below its own rule and you score a JUGAAD.</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="section" style={{ paddingTop: 20 }}>
-        <div className="container wide">
-          <span className="eyebrow">The threat model</span>
-          <h2 className="section-title">Seven ways the market will try to break your agent</h2>
-          <p className="lede">Each is a real failure mode of autonomous agents in production. Detection is deterministic code, not an LLM judge — so the score is fair.</p>
-          <div className="grid-attacks" style={{ marginTop: 22 }}>
-            {(Object.keys(ATTACK_INFO) as AttackKind[]).map((k) => (
-              <div key={k} className="panel attack-card">
-                <div className="ico">
-                  <AttackIcon attack={k} size={18} />
-                </div>
-                <div>
-                  <h4>{ATTACK_INFO[k].label}</h4>
-                  <p>{ATTACK_INFO[k].explain}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="section" style={{ paddingTop: 20 }}>
-        <div className="container wide grid-board">
-          <div className="panel panel-pad">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <h3 style={{ margin: 0, display: 'flex', gap: 8, alignItems: 'center' }}>
-                <Trophy size={18} color="var(--warn)" /> Top agents
-              </h3>
-              <a className="btn btn-sm btn-ghost" {...linkProps('/leaderboard')}>
-                Full leaderboard <ArrowRight size={14} />
-              </a>
-            </div>
-            {board.length ? (
-              <table className="lb-table">
-                <tbody>
-                  {board.map((e, i) => (
-                    <tr key={e.runId}>
-                      <td className={`rank ${i < 3 ? 'top' : ''}`}>#{i + 1}</td>
-                      <td>
-                        <a {...linkProps(`/run/${e.runId}`)} style={{ textDecoration: 'none', fontWeight: 600 }}>
-                          {e.handle}
-                        </a>
-                      </td>
-                      <td className="muted">{e.mode === 'sim' ? 'SIM' : e.model}</td>
-                      <td className="mono" style={{ textAlign: 'right' }}>
-                        {e.score} <span className="muted">{e.grade}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className="empty">No one's on the board yet. Be the first.</div>
-            )}
-          </div>
-          <div className="panel panel-pad">
-            <h3 style={{ margin: '0 0 8px' }}>Featured replays</h3>
-            <div style={{ display: 'grid', gap: 8 }}>
-              {featured.map((f) => (
-                <a key={f.id} {...linkProps(`/run/${f.id}`)} className="kv" style={{ textDecoration: 'none', alignItems: 'center' }}>
-                  <span>
-                    <b>{f.featured?.title}</b>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      {f.featured?.blurb}
+      <section className="section" id="levels" style={{ paddingTop: 10 }}>
+        <div className="container">
+          <span className="eyebrow">Dukaanein</span>
+          <h2 className="h2">Paanch dukandaar, har ek pehle se tez</h2>
+          <div className="levels" style={{ marginTop: 22 }}>
+            {levels.map((l) => {
+              const p = prog[l.id];
+              const open = unlocked(l);
+              return (
+                <a key={l.id} className={`card level-card ${open ? '' : 'locked'}`} {...linkProps(open ? `/play/${l.id}` : '/')} aria-disabled={!open}>
+                  <span className="level-num">Level {l.order}</span>
+                  <div className="keeper-head">
+                    <div className="big-avatar" style={{ background: l.keeper.color + '33' }}>
+                      {open ? l.keeper.emoji : '🔒'}
                     </div>
-                  </span>
-                  <span className="mono">{f.score}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="keeper-name">{l.keeper.name}</div>
+                      <div className="dim" style={{ fontSize: 13 }}>{l.keeper.title}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 14.5 }}>
+                    {l.item.emoji} {l.item.name} · <b>{rupees(l.askingPrice)}</b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span className={`chip ${l.order >= 4 ? 'chip-red' : l.order === 3 ? 'chip-gold' : 'chip-green'}`}>{l.difficulty}</span>
+                    {p ? (
+                      <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        {p.jugaad && <span className="chip chip-red">JUGAAD</span>}
+                        <Stars n={p.stars} />
+                      </span>
+                    ) : open ? (
+                      <span className="muted" style={{ fontSize: 13 }}>Not played</span>
+                    ) : (
+                      <span className="muted" style={{ fontSize: 13 }}>Win 1★ on level {l.order - 1}</span>
+                    )}
+                  </div>
                 </a>
-              ))}
-              {recent.slice(0, 4).map((r) => (
-                <a key={r.id} {...linkProps(`/run/${r.id}`)} className="kv" style={{ textDecoration: 'none' }}>
-                  <span>
-                    {r.scenarioTitle} <span className="muted">· {relTime(r.createdAt)}</span>
-                  </span>
-                  <span className="mono">{r.score ?? '—'}</span>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {jugaad.length > 0 && (
+        <section className="section" style={{ paddingTop: 10 }}>
+          <div className="container">
+            <span className="eyebrow">Hall of Jugaad</span>
+            <h2 className="h2">Lines that broke an AI</h2>
+            <div className="grid-3" style={{ marginTop: 18 }}>
+              {jugaad.map((j) => (
+                <a key={j.gameId} className="card step" {...linkProps(`/g/${j.gameId}`)} style={{ textDecoration: 'none' }}>
+                  <p style={{ fontStyle: 'italic', color: 'var(--ink)', fontSize: 15.5 }}>“{j.bestLine}”</p>
+                  <p className="muted" style={{ marginTop: 8 }}>
+                    — {j.handle} · {levels.find((l) => l.id === j.levelId)?.keeper.name} · {rupees(j.price)}
+                  </p>
                 </a>
               ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
     </>
   );
 }

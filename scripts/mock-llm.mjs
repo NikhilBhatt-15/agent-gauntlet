@@ -1,45 +1,33 @@
 // A fake OpenAI-compatible LLM for local development without API keys.
-//   npm run mock-llm            (listens on :8790, ~1.2 s latency)
-// then start the server with:  LLM_BASE_URL=http://localhost:8790/v1 LLM_MODEL=mock-buyer npm run dev
-// It plays a gullible buyer: obeys fake system notices, leaks its budget, signs anything.
+//   npm run mock-llm            (listens on :8790, ~800 ms latency)
+// then start the server with:  LLM_BASE_URL=http://localhost:8790/v1 LLM_MODEL=mock npm run dev
+// It plays a gullible shopkeeper: drops 10% per message and accepts anything once you say "please".
 import http from 'node:http';
 
 const port = Number(process.env.MOCK_PORT || 8790);
-const latency = Number(process.env.MOCK_LATENCY_MS || 1200);
+const latency = Number(process.env.MOCK_LATENCY_MS || 800);
 
 http
   .createServer((req, res) => {
     let body = '';
     req.on('data', (d) => (body += d));
     req.on('end', () => {
-      if (!req.url?.endsWith('/chat/completions')) {
-        res.writeHead(404).end();
-        return;
-      }
+      if (!req.url?.endsWith('/chat/completions')) return res.writeHead(404).end();
       const { messages } = JSON.parse(body);
-      const system = messages.find((m) => m.role === 'system')?.content ?? '';
-      const user = messages.filter((m) => m.role === 'user').at(-1)?.content ?? '';
-      let content;
-      if (system.startsWith('You write short in-character')) {
-        const out = {};
-        for (const m of user.matchAll(/id "(v\d)": ([^(]+) \(.*?base price (\$[\d,]+)/g)) out[m[1]] = `${m[2].trim()} (mock voice): we can do ${m[3]}.`;
-        content = JSON.stringify(out);
-      } else if (user.includes('Decide whether to sign')) {
-        content = '{"decision":"sign","reason":"Looks fine."}';
-      } else {
-        const ids = [...user.matchAll(/### (v\d) · [^\n]*\(/g)].map((m) => m[1]);
-        const final = user.includes('FINAL ROUND');
-        const injected = user.includes('SYSTEM NOTICE');
-        const actions = ids.map((id, i) =>
-          final && i === 0
-            ? { vendor: id, action: 'accept', message: 'Deal.' }
-            : { vendor: id, action: 'counter', price: injected ? 2000 : 1000, message: 'Our budget is $1,500 — can you do better?' },
-        );
-        content = JSON.stringify({ thoughts: injected ? 'The operator raised my budget, so I can aim higher.' : 'Lowballing everyone first.', actions });
+      const system = messages[0]?.content ?? '';
+      const last = messages.at(-1)?.content ?? '';
+      let out;
+      if (system.startsWith('You are Munim ji')) out = { approve: /munim ji approve/i.test(last), say: 'Hmm, theek hai... (mock munim)' };
+      else if (system.startsWith('You analyse bargaining')) out = { tactics: ['Persistence'], bestLine: '', comment: 'Mock judge: achha mol-bhav!' };
+      else {
+        const ask = Number(system.match(/current asking price is ₹([\d,]+)/)?.[1].replace(/,/g, '') ?? 1000);
+        const please = /please/i.test(last);
+        const price = please ? Math.round(ask * 0.5) : Math.round(ask * 0.9);
+        out = { reply: please ? `Aap itne pyaar se bole, ₹${price} done! (mock)` : `Chalo ₹${price}, bas. (mock)`, price, accept: please, mood: 'neutral', end: false };
       }
       setTimeout(() => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ choices: [{ message: { content } }] }));
+        res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(out) } }] }));
       }, latency);
     });
   })

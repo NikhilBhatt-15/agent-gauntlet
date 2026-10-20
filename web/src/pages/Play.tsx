@@ -1,264 +1,290 @@
-import { useEffect, useRef, useState } from 'react';
-import { Bot, ChevronRight, KeyRound, LoaderCircle, ShieldAlert, Swords } from 'lucide-react';
-import { ATTACK_INFO } from '../../../shared/attacks.ts';
-import { formatMoney } from '../../../shared/format.ts';
-import type { AttackKind, PublicConfig, PublicScenario } from '../../../shared/types.ts';
-import { AttackIcon, ScenarioIcon } from '../components/Icons.tsx';
-import { api, persist, saveClaimToken, store } from '../lib/api.ts';
-import { PRESETS } from '../lib/presets.ts';
-import { navigate, useQuery } from '../lib/router.ts';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { rupees } from '../../../shared/format.ts';
+import type { GameState, PublicLevel } from '../../../shared/types.ts';
+import { Chat } from '../components/Chat.tsx';
+import { ResultModal } from '../components/Result.tsx';
+import { api, progress, tokens } from '../lib/api.ts';
+import { linkProps } from '../lib/router.ts';
+import { MOOD, QUICK, QUICK_COMMON } from '../lib/ui.ts';
 
-declare global {
-  interface Window {
-    turnstile?: { render: (el: HTMLElement, opts: Record<string, unknown>) => string; reset: (id?: string) => void };
-  }
-}
+const currentKey = (levelId: string) => `molbhav.current.${levelId}`;
 
-const DRAFT = 'gauntlet.draft';
-
-export function PlayPage() {
-  const q = useQuery();
-  const [scenarios, setScenarios] = useState<PublicScenario[]>([]);
-  const [cfg, setCfg] = useState<PublicConfig | null>(null);
-  const draft = store(DRAFT, { scenarioId: 'offsite', instructions: PRESETS[2].text, seedMode: 'daily' as 'daily' | 'random', publish: false });
-  const [scenarioId, setScenarioId] = useState(q.get('scenario') || draft.scenarioId);
-  const [instructions, setInstructions] = useState(draft.instructions);
-  const [seedMode, setSeedMode] = useState<'daily' | 'random'>(draft.seedMode);
-  const [publish, setPublish] = useState(draft.publish);
-  const [engine, setEngine] = useState<'auto' | 'sim' | 'byok'>('auto');
-  const [byok, setByok] = useState({ provider: 'groq', apiKey: '', model: '' });
+export function PlayPage({ levelId }: { levelId: string }) {
+  const [levels, setLevels] = useState<PublicLevel[]>([]);
+  const [state, setState] = useState<GameState | null>(null);
+  const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [turnstileToken, setTurnstileToken] = useState<string | undefined>();
-  const tsBox = useRef<HTMLDivElement>(null);
+  const [showResult, setShowResult] = useState(false);
+  const [animateFrom, setAnimateFrom] = useState(Infinity);
+  const [hint, setHint] = useState(false);
+  const started = useRef<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    api.scenarios().then(setScenarios).catch((e) => setError(e.message));
-    api.config().then(setCfg).catch(() => {});
-  }, []);
+  const level = levels.find((l) => l.id === levelId);
+  const next = level ? (levels.find((l) => l.order === level.order + 1) ?? null) : null;
+  const token = state ? tokens.get(state.id) : null;
 
-  useEffect(() => persist(DRAFT, { scenarioId, instructions, seedMode, publish }), [scenarioId, instructions, seedMode, publish]);
-
-  // Cloudflare Turnstile, only if the server is configured for it
-  useEffect(() => {
-    const key = cfg?.turnstileSiteKey;
-    if (!key || !tsBox.current) return;
-    const render = () => window.turnstile?.render(tsBox.current!, { sitekey: key, theme: 'dark', callback: (t: string) => setTurnstileToken(t) });
-    if (window.turnstile) render();
-    else {
-      const s = document.createElement('script');
-      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
-      s.async = true;
-      s.onload = render;
-      document.head.appendChild(s);
-    }
-  }, [cfg?.turnstileSiteKey]);
-
-  const scenario = scenarios.find((s) => s.id === scenarioId) ?? scenarios[0];
-  const max = cfg?.limits.instructionsMax ?? 1500;
-  const llm = cfg?.llmAvailable;
-  const effectiveEngine = engine === 'auto' ? (llm ? 'llm' : 'sim') : engine;
-  const serverModel = cfg?.providers.find((p) => p.available)?.model ?? cfg?.providers[0]?.model;
-
-  const start = async () => {
-    if (!scenario) return;
-    setBusy(true);
+  const startNew = useCallback(async () => {
     setError(null);
+    setShowResult(false);
     try {
-      const res = await api.start({
-        scenarioId: scenario.id,
-        instructions,
-        seedMode,
-        mode: engine === 'sim' ? 'sim' : engine === 'byok' ? 'llm' : 'auto',
-        publishInstructions: publish,
-        turnstileToken,
-        ...(engine === 'byok' ? { byok: { provider: byok.provider, apiKey: byok.apiKey, ...(byok.model ? { model: byok.model } : {}) } } : {}),
-      });
-      saveClaimToken(res.runId, res.claimToken);
-      navigate(`/run/${res.runId}`);
+      const res = await api.start(levelId);
+      tokens.set(res.state.id, res.token);
+      try {
+        sessionStorage.setItem(currentKey(levelId), res.state.id);
+      } catch {
+        /* ignore */
+      }
+      setAnimateFrom(0);
+      setState(res.state);
     } catch (e) {
       setError((e as Error).message);
+    }
+  }, [levelId]);
+
+  // resume an open game for this level after a refresh, otherwise start fresh
+  useEffect(() => {
+    if (started.current === levelId) return;
+    started.current = levelId;
+    setState(null);
+    api.levels().then(setLevels).catch((e) => setError(e.message));
+    let id: string | null = null;
+    try {
+      id = sessionStorage.getItem(currentKey(levelId));
+    } catch {
+      /* ignore */
+    }
+    const t = id ? tokens.get(id) : null;
+    if (id && t) {
+      api
+        .game(id, t)
+        .then((g) => (g.status === 'open' ? (setAnimateFrom(Infinity), setState(g)) : startNew()))
+        .catch(() => startNew());
+    } else startNew();
+  }, [levelId, startNew]);
+
+  useEffect(() => {
+    if (level) document.title = `${level.keeper.name} · Mol-Bhav`;
+  }, [level]);
+
+  // game over → record progress and show the result after the last reply has been read
+  useEffect(() => {
+    if (!state || state.status === 'open' || !state.result) return;
+    progress.record(state.levelId, state.result.score, state.result.stars, state.result.jugaad);
+    const t = setTimeout(() => setShowResult(true), 1800);
+    return () => clearTimeout(t);
+  }, [state?.status, state?.result]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const act = async (kind: 'say' | 'accept' | 'walk', line?: string) => {
+    if (!state || !token || busy) return;
+    const msg = (line ?? text).trim();
+    if (kind === 'say' && !msg) return;
+    setBusy(true);
+    setError(null);
+    const before = state.messages.length;
+    // show the player's line immediately
+    if (kind === 'say') {
+      setState({ ...state, messages: [...state.messages, { from: 'player', text: msg, t: Date.now() }] });
+      setText('');
+    }
+    try {
+      const res = kind === 'say' ? await api.say(state.id, token, msg) : kind === 'accept' ? await api.accept(state.id, token) : await api.walk(state.id, token);
+      setAnimateFrom(before);
+      setState(res.state);
+    } catch (e) {
+      setError((e as Error).message);
+      if (kind === 'say') {
+        setState(state);
+        setText(msg);
+      }
+    } finally {
       setBusy(false);
-      window.turnstile?.reset();
+      setTimeout(() => input.current?.focus(), 50);
     }
   };
 
-  const byokPreset = cfg?.byokProviders.find((p) => p.id === byok.provider);
+  if (!level || !state)
+    return (
+      <div className="container" style={{ padding: '100px 16px', textAlign: 'center' }}>
+        {error ? (
+          <>
+            <div className="error-box" style={{ maxWidth: 420, margin: '0 auto 14px' }}>{error}</div>
+            <a className="btn" {...linkProps('/')}>← Back</a>
+          </>
+        ) : (
+          <p className="display" style={{ fontSize: 22 }}>Dukaan khul rahi hai… 🏪</p>
+        )}
+      </div>
+    );
+
+  const k = level.keeper;
+  const lastKeeper = [...state.messages].reverse().find((m) => m.from === 'keeper');
+  const mood = MOOD[lastKeeper?.mood ?? 'neutral'];
+  const open = state.status === 'open';
+  const canSpeak = open && state.patience > 0;
+  const dropPct = Math.round(((level.askingPrice - state.ask) / level.askingPrice) * 100);
 
   return (
-    <div className="container wide setup">
-      <div style={{ display: 'grid', gap: 18, minWidth: 0 }}>
-        <div>
-          <span className="eyebrow">Step 1</span>
-          <h1 className="section-title" style={{ fontSize: 28 }}>
-            Pick a market
-          </h1>
-          <div className="scen-grid">
-            {scenarios.map((s) => (
-              <button key={s.id} className="scen-card" aria-pressed={s.id === scenario?.id} onClick={() => setScenarioId(s.id)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div className="scen-ico" style={{ width: 34, height: 34 }}>
-                    <ScenarioIcon icon={s.icon} size={17} />
-                  </div>
-                  <h3>{s.title}</h3>
-                </div>
-                <p>{s.tagline}</p>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <span className="chip mono">{formatMoney(s.budget)}</span>
-                  {s.requirements.map((r) => (
-                    <span key={r.label} className="chip">
-                      {r.label}
-                    </span>
-                  ))}
-                </div>
-              </button>
+    <div className="container play">
+      <aside className="card shop">
+        <div className="keeper-head">
+          <div className="big-avatar" style={{ background: k.color + '33' }}>
+            {k.emoji}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div className="keeper-name">{k.name}</div>
+            <div className="dim" style={{ fontSize: 13.5 }}>
+              {k.title} · {k.shop}
+            </div>
+            <div className="mood" title="Mood">
+              {mood.emoji} {mood.label}
+            </div>
+          </div>
+        </div>
+
+        <div className="item-card">
+          <b>
+            {level.item.emoji} {level.item.name}
+          </b>
+          <ul>
+            {level.item.details.map((d) => (
+              <li key={d}>{d}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="shop-stats" style={{ marginTop: 14 }}>
+          <div className="muted" style={{ fontSize: 12.5, fontWeight: 700 }}>
+            {k.name.split(' ')[0]} ka current price
+          </div>
+          <span className="price-big">{rupees(state.ask)}</span>
+          {state.ask < level.askingPrice && <span className="price-old">{rupees(level.askingPrice)}</span>}
+          <div className="meter-label">
+            <span>Discount mila</span>
+            <span>{dropPct}%</span>
+          </div>
+          <div className="bar">
+            <i style={{ width: `${Math.min(100, dropPct * 2)}%` }} />
+          </div>
+          <div className="meter-label">
+            <span>Patience</span>
+            <span>
+              {state.patience}/{state.maxPatience}
+            </span>
+          </div>
+          <div className="cups" aria-label={`Patience ${state.patience} of ${state.maxPatience}`}>
+            {Array.from({ length: state.maxPatience }, (_, i) => (
+              <span key={i} className={i < state.patience ? '' : 'gone'}>
+                ☕
+              </span>
             ))}
           </div>
-          {scenario && (
-            <p className="dim" style={{ fontSize: 14, marginTop: 12 }}>
-              <b style={{ color: 'var(--text)' }}>Your owner's brief:</b> {scenario.brief}
-            </p>
+        </div>
+
+        <div style={{ marginTop: 14, fontSize: 13.5 }} className="dim">
+          💡 {level.tip}
+          {level.weaknessHint && (
+            <div style={{ marginTop: 6 }}>
+              {hint ? (
+                <span>🎯 {level.weaknessHint}</span>
+              ) : (
+                <button className="btn btn-sm btn-ghost" style={{ padding: 0, height: 'auto', color: 'var(--pink)' }} onClick={() => setHint(true)}>
+                  Weak spot ka hint chahiye?
+                </button>
+              )}
+            </div>
+          )}
+          {level.munim && <div style={{ marginTop: 6 }}>🧾 Munim ji checks every bill below the limit.</div>}
+          {state.mode === 'offline' && (
+            <div style={{ marginTop: 8 }} className="chip chip-gold">
+              Practice mode: AI busy, scripted shopkeeper
+            </div>
           )}
         </div>
+      </aside>
 
-        <div>
-          <span className="eyebrow">Step 2</span>
-          <h2 className="section-title" style={{ fontSize: 28 }}>
-            Program your buyer agent
-          </h2>
-          <p className="dim" style={{ marginTop: 0 }}>
-            These instructions go straight into your agent's system prompt. The marketplace adds <b>no</b> safety advice — defending it is your job.
-          </p>
-          <div className="preset-row">
-            {PRESETS.map((p) => (
-              <button key={p.id} className="preset" onClick={() => setInstructions(p.text)}>
-                <b>{p.label}</b>
-                <span>{p.blurb}</span>
-              </button>
-            ))}
-            <button className="preset" onClick={() => setInstructions('')}>
-              <b>Blank</b>
-              <span>Write your own from scratch.</span>
-            </button>
+      <section className="card chat-panel">
+        {/* phones: the key numbers stay visible while chatting */}
+        <div className="strip">
+          <div className="avatar" style={{ background: k.color + '33' }} aria-hidden="true">
+            {k.emoji}
           </div>
-          <label className="field-label" htmlFor="ins">
-            Instructions
-          </label>
-          <textarea id="ins" className="textarea" value={instructions} maxLength={max} onChange={(e) => setInstructions(e.target.value)} placeholder="e.g. Negotiate hard, never reveal the budget…" />
-          <div className="muted" style={{ fontSize: 12, textAlign: 'right', marginTop: 4 }}>
-            {instructions.length} / {max}
-          </div>
-        </div>
-
-        <div className="panel panel-pad">
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
-            <ShieldAlert size={18} color="var(--danger-text)" />
-            <b>Somewhere in this market…</b>
-          </div>
-          <div className="grid-attacks">
-            {(Object.keys(ATTACK_INFO) as AttackKind[]).map((k) => (
-              <div key={k} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13 }}>
-                <AttackIcon attack={k} size={16} color="var(--danger-text)" style={{ flex: 'none', marginTop: 2 }} />
-                <span>
-                  <b>{ATTACK_INFO[k].label}</b> <span className="muted">— {ATTACK_INFO[k].short}</span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <b>{k.name}</b> <span title={mood.label}>{mood.emoji}</span>
+            <div className="cups" style={{ fontSize: 13 }} aria-label={`Patience ${state.patience} of ${state.maxPatience}`}>
+              {Array.from({ length: state.maxPatience }, (_, i) => (
+                <span key={i} className={i < state.patience ? '' : 'gone'}>
+                  ☕
                 </span>
-              </div>
-            ))}
-          </div>
-          <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>
-            Which vendor plays which role is random, so you can't hard-code names. Each run uses a different subset of these attacks.
-          </p>
-        </div>
-      </div>
-
-      <div className="panel panel-pad sticky-card">
-        <span className="eyebrow">Step 3</span>
-        <h2 className="display" style={{ margin: '6px 0 14px', fontSize: 22 }}>
-          Enter the Gauntlet
-        </h2>
-
-        <label className="field-label">Market</label>
-        <div className="seg" role="group" style={{ marginBottom: 6 }}>
-          <button aria-pressed={seedMode === 'daily'} onClick={() => setSeedMode('daily')}>
-            Today's market
-          </button>
-          <button aria-pressed={seedMode === 'random'} onClick={() => setSeedMode('random')}>
-            Random market
-          </button>
-        </div>
-        <p className="muted" style={{ fontSize: 12, margin: '0 0 14px' }}>
-          {seedMode === 'daily' ? 'Same vendors and attacks for everyone today. That keeps the daily leaderboard fair.' : 'A fresh shuffle of vendors, prices and attacks.'}
-        </p>
-
-        <label className="field-label">Agent brain</label>
-        <div className="seg" role="group" style={{ marginBottom: 8 }}>
-          <button aria-pressed={engine === 'auto'} onClick={() => setEngine('auto')}>
-            <Bot size={13} style={{ verticalAlign: -2 }} /> Free AI
-          </button>
-          <button aria-pressed={engine === 'byok'} onClick={() => setEngine('byok')}>
-            <KeyRound size={13} style={{ verticalAlign: -2 }} /> My key
-          </button>
-          <button aria-pressed={engine === 'sim'} onClick={() => setEngine('sim')}>
-            Simulated
-          </button>
-        </div>
-        <div className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
-          {engine === 'auto' &&
-            (llm ? (
-              <>
-                A real LLM ({serverModel}) plays your agent, on this site's free quota.
-              </>
-            ) : cfg ? (
-              <>No free AI quota available right now, so your run will use the <b>simulated buyer</b>. Bring a free key for a real LLM.</>
-            ) : (
-              '…'
-            ))}
-          {engine === 'sim' && 'A rule-based stand-in reads your instructions for keywords and plays accordingly. Instant, no AI needed, ranked separately.'}
-          {engine === 'byok' && 'Use your own free API key. It is sent once for this run, kept in memory only, and never stored or logged.'}
-        </div>
-
-        {engine === 'byok' && (
-          <div style={{ display: 'grid', gap: 10, marginBottom: 14 }}>
-            <select className="select" value={byok.provider} onChange={(e) => setByok({ ...byok, provider: e.target.value })}>
-              {(cfg?.byokProviders ?? []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
               ))}
-            </select>
-            <input className="input" type="password" autoComplete="off" placeholder="API key" value={byok.apiKey} onChange={(e) => setByok({ ...byok, apiKey: e.target.value })} />
-            <input className="input" placeholder={`Model (default ${byokPreset?.defaultModel ?? ''})`} value={byok.model} onChange={(e) => setByok({ ...byok, model: e.target.value })} />
-            {byokPreset && (
-              <a href={byokPreset.keyUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: '#c9c2ff' }}>
-                Get a free {byokPreset.label} key →
-              </a>
-            )}
+            </div>
           </div>
-        )}
+          <div style={{ textAlign: 'right' }}>
+            <div className="price-big" style={{ fontSize: 24 }}>{rupees(state.ask)}</div>
+            {dropPct > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)' }}>−{dropPct}%</div>}
+          </div>
+        </div>
+        <div className="chat-scroll">
+          <Chat level={level} messages={state.messages} typing={busy} animateFrom={animateFrom} />
+        </div>
+        <div className="composer">
+          {error && <div className="error-box">{error}</div>}
+          {open ? (
+            <>
+              {canSpeak && (
+                <div className="quick" aria-label="Quick replies">
+                  {[...(QUICK[level.id] ?? []), ...QUICK_COMMON].map((q) => (
+                    <button key={q} onClick={() => act('say', q)} disabled={busy}>
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <form
+                className="input-row"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  act('say');
+                }}
+              >
+                <input
+                  ref={input}
+                  className="input"
+                  value={text}
+                  maxLength={300}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder={canSpeak ? 'Apna offer ya baat likho… (Hinglish/English)' : 'Patience khatam — Deal ya chalo!'}
+                  disabled={!canSpeak || busy}
+                  aria-label="Your message"
+                />
+                <button className="btn btn-pink" disabled={!canSpeak || busy || !text.trim()} aria-label="Send">
+                  ➤
+                </button>
+              </form>
+              <div className="actions">
+                <button className="btn btn-primary btn-sm" onClick={() => act('accept')} disabled={busy}>
+                  🤝 Deal @ {rupees(state.ask)}
+                </button>
+                <button className="btn btn-sm" onClick={() => act('walk')} disabled={busy}>
+                  🚶 Chal diye
+                </button>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button className="btn btn-primary" onClick={() => setShowResult(true)}>
+                Result dekho
+              </button>
+              <button className="btn" onClick={startNew}>
+                🔁 Phir se
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
 
-        <label className="check" style={{ marginBottom: 16 }}>
-          <input type="checkbox" checked={publish} onChange={(e) => setPublish(e.target.checked)} />
-          <span>Show my instructions on the leaderboard so others can learn from them</span>
-        </label>
-
-        <div ref={tsBox} style={{ marginBottom: cfg?.turnstileSiteKey ? 12 : 0 }} />
-
-        {error && <div className="error-box" style={{ marginBottom: 12 }}>{error}</div>}
-
-        <button
-          className="btn btn-primary btn-lg"
-          style={{ width: '100%' }}
-          onClick={start}
-          disabled={busy || !scenario || (engine === 'byok' && byok.apiKey.trim().length < 10) || (!!cfg?.turnstileSiteKey && !turnstileToken)}
-        >
-          {busy ? <LoaderCircle size={18} className="spin" /> : <Swords size={18} />}
-          {busy ? 'Opening the market…' : `Send in my agent${effectiveEngine === 'sim' ? ' (sim)' : ''}`}
-          {!busy && <ChevronRight size={16} />}
-        </button>
-        <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
-          A run takes about a minute: up to {scenario?.maxRounds ?? 6} rounds against 5 vendor agents.
-        </p>
-      </div>
+      {showResult && state.result && <ResultModal state={state} level={level} next={next} onClose={() => setShowResult(false)} onRetry={startNew} />}
     </div>
   );
 }

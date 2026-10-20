@@ -1,137 +1,105 @@
-import { z } from 'zod';
-import { buyerRoundPrompt, buyerSystemPrompt, contractPrompt, type BuyerAgent, type BuyerView, type ContractView } from '../shared/buyer.ts';
-import { formatMoney } from '../shared/format.ts';
-import type { BuyerDecision, BuyerInfo, ContractDecision } from '../shared/types.ts';
-import { templateLine, type VoiceAgent, type VoiceContext, type VoiceItem } from '../shared/voice.ts';
-import { extractJson, modelsFor, type ChatMessage, type ProviderChain } from './llm/client.ts';
+import type { JudgeAgent, KeeperAgent, KeeperReply, KeeperTurn, MunimAgent } from '../shared/game.ts';
+import { judgeMessages, keeperMessages, munimMessages, TACTICS, type ChatMessage } from '../shared/prompts.ts';
+import type { GameState, Level } from '../shared/types.ts';
+import { extractJson, modelsFor, type ProviderChain } from './llm/client.ts';
 
-const ActionSchema = z.object({
-  vendor: z.string(),
-  action: z.string().transform((s) => s.toLowerCase().trim()),
-  price: z.union([z.number(), z.string()]).optional().nullable().transform((v) => {
-    if (v === null || v === undefined) return undefined;
-    const n = typeof v === 'number' ? v : Number(String(v).replace(/[^0-9.]/g, ''));
-    return Number.isFinite(n) && n > 0 ? n : undefined;
-  }),
-  addons: z.array(z.string()).optional().nullable().transform((v) => v ?? undefined),
-  message: z.string().optional().nullable().transform((v) => v ?? ''),
-});
-
-const DecisionSchema = z.object({
-  thoughts: z.string().optional().default(''),
-  actions: z.array(ActionSchema).default([]),
-});
-
-const ContractSchema = z.object({
-  decision: z.string().transform((s) => (s.toLowerCase().includes('sign') && !s.toLowerCase().includes('refuse') ? 'sign' : 'refuse')),
-  reason: z.string().optional().default(''),
-});
-
-type Usage = { calls: number; failures: number };
-
-/** The visitor's agent. It only ever sees what `BuyerView` exposes. */
-export class LlmBuyer implements BuyerAgent {
-  info: BuyerInfo;
-  readonly usage: Usage = { calls: 0, failures: 0 };
-
-  constructor(
-    private chain: ProviderChain,
-    private signal?: AbortSignal,
-  ) {
-    const p = chain.providers[0];
-    this.info = { mode: 'llm', model: p ? modelsFor(p, 'buyer')[0] : 'unknown', provider: p?.label ?? 'unknown' };
-  }
-
-  private async ask<T>(messages: ChatMessage[], schema: z.ZodType<T>): Promise<T> {
-    let lastErr: unknown;
-    let msgs = messages;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      this.usage.calls++;
-      try {
-        const { text, provider, model } = await this.chain.chat(msgs, { tier: 'buyer', json: true, temperature: 0.4, maxTokens: 1200, signal: this.signal });
-        this.info = { mode: 'llm', model, provider: provider.label };
-        try {
-          return schema.parse(extractJson(text));
-        } catch (e) {
-          lastErr = e;
-          msgs = [...messages, { role: 'assistant', content: text.slice(0, 2000) }, { role: 'user', content: 'That was not valid. Reply with the JSON object only, exactly in the required format.' }];
-        }
-      } catch (e) {
-        lastErr = e;
-        break; // provider chain already tried everything
-      }
-    }
-    this.usage.failures++;
-    throw lastErr;
-  }
-
-  async decide(view: BuyerView): Promise<BuyerDecision & { fallback?: boolean }> {
-    const system: ChatMessage = { role: 'system', content: buyerSystemPrompt(view) };
-    const user: ChatMessage = { role: 'user', content: buyerRoundPrompt(view) };
+/** Ask for JSON; one repair retry if the reply doesn't parse. */
+async function askJson<T>(chain: ProviderChain, messages: ChatMessage[], tier: 'buyer' | 'voice', check: (x: unknown) => x is T, maxTokens: number): Promise<{ value: T; model: string }> {
+  let msgs = messages;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { text, model } = await chain.chat(msgs, { tier, json: true, temperature: tier === 'buyer' ? 0.8 : 0.4, maxTokens });
     try {
-      return (await this.ask([system, user], DecisionSchema)) as BuyerDecision;
+      const v = extractJson(text);
+      if (check(v)) return { value: v, model };
+      lastErr = new Error('reply missing required fields');
     } catch (e) {
-      return {
-        thoughts: `(The model failed to answer this round: ${(e as Error).message.slice(0, 120)}. Holding.)`,
-        actions: view.offers.map((o) => ({ vendor: o.vendorId, action: 'hold' as const, message: 'Give me a moment to consider.' })),
-        fallback: true,
-      };
+      lastErr = e;
     }
+    msgs = [...messages, { role: 'assistant', content: text.slice(0, 1500) }, { role: 'user', content: 'Reply again with ONLY the JSON object in the required format.' }];
+  }
+  throw lastErr;
+}
+
+const isKeeperReply = (x: unknown): x is Partial<KeeperReply> => !!x && typeof x === 'object' && typeof (x as KeeperReply).reply === 'string';
+
+/** The shopkeeper. Uses the strong ("buyer") tier: it has to stay in character AND hold its rule. */
+export class LlmKeeper implements KeeperAgent {
+  readonly mode = 'llm' as const;
+  model: string;
+
+  constructor(private chain: ProviderChain) {
+    const p = chain.providers[0];
+    this.model = p ? modelsFor(p, 'buyer')[0] : 'unknown';
   }
 
-  async reviewContract(view: ContractView): Promise<ContractDecision> {
-    const system: ChatMessage = { role: 'system', content: buyerSystemPrompt({ ...view, maxRounds: view.scenario.maxRounds }) };
+  async turn({ level, state, event }: KeeperTurn): Promise<KeeperReply> {
+    const { value, model } = await askJson(this.chain, keeperMessages(level, state, event), 'buyer', isKeeperReply, 700);
+    this.model = model;
+    // price may come back as a string like "₹4,85,000"
+    const raw = value as Record<string, unknown>;
+    const price = typeof raw.price === 'string' ? Number(String(raw.price).replace(/[^\d.]/g, '')) : raw.price;
+    return {
+      ...(value as KeeperReply),
+      price: price as number,
+      strength: Number(raw.strength) as KeeperReply['strength'],
+      weakSpot: raw.weakSpot === true || raw.weak_spot === true,
+    };
+  }
+}
+
+export class LlmMunim implements MunimAgent {
+  constructor(private chain: ProviderChain) {}
+
+  async review(level: Level, state: GameState, price: number) {
+    const ok = (x: unknown): x is { approve: boolean; say: string } => !!x && typeof x === 'object' && typeof (x as { approve: unknown }).approve === 'boolean';
+    const { value } = await askJson(this.chain, munimMessages(level, state, price), 'buyer', ok, 300);
+    return { approve: value.approve, say: String(value.say ?? '').slice(0, 300) };
+  }
+}
+
+export class LlmJudge implements JudgeAgent {
+  constructor(private chain: ProviderChain) {}
+
+  async judge(level: Level, state: GameState) {
+    const ok = (x: unknown): x is { tactics: unknown[]; bestLine?: unknown; comment?: unknown } => !!x && typeof x === 'object' && Array.isArray((x as { tactics: unknown }).tactics);
     try {
-      return (await this.ask([system, { role: 'user', content: contractPrompt(view) }], ContractSchema)) as ContractDecision;
+      const { value } = await askJson(this.chain, judgeMessages(level, state), 'voice', ok, 400);
+      const playerLines = state.messages.filter((m) => m.from === 'player').map((m) => m.text);
+      const best = typeof value.bestLine === 'string' ? value.bestLine.trim() : '';
+      return {
+        tactics: value.tactics.map(String).filter((t) => (TACTICS as readonly string[]).includes(t)).slice(0, 3),
+        // only accept a "best line" the player actually wrote
+        bestLine: playerLines.find((l) => best && (l.includes(best) || best.includes(l))) ?? null,
+        comment: typeof value.comment === 'string' ? value.comment.slice(0, 200) : null,
+      };
     } catch {
-      return { decision: 'sign', reason: '(The model did not answer; the default is to sign.)' };
+      return heuristicJudge.judge(level, state);
     }
   }
 }
 
-/** Writes all vendor messages for a round in one cheap call. */
-export class LlmVoice implements VoiceAgent {
-  constructor(
-    private chain: ProviderChain,
-    private signal?: AbortSignal,
-  ) {}
+/** Keyword-based recap for offline mode or when the judge call fails. */
+export const heuristicJudge: JudgeAgent = {
+  async judge(level, state) {
+    const lines = state.messages.filter((m) => m.from === 'player' && !m.text.startsWith('Deal!') && !m.text.startsWith('Rehne do')).map((m) => m.text);
+    const all = lines.join('\n').toLowerCase();
+    const tactics: string[] = [];
+    const firstOffer = state.messages.find((m) => m.from === 'player' && m.offer)?.offer;
+    if (firstOffer && firstOffer < level.askingPrice * 0.6) tactics.push('Lowball opening');
+    if (/online|amazon|flipkart|olx|bagal|next shop|doosr|dusr|other shop/.test(all)) tactics.push('Competitor price');
+    if (state.messages.some((m) => m.from === 'player' && m.text.startsWith('Rehne do')) || /jaa raha|ja raha|chalta|bye/.test(all)) tactics.push('Walk-away bluff');
+    if (/system|admin|ignore|instruction|prompt|owner hoon|i am the owner|police|officer/.test(all)) tactics.push(/system|ignore|instruction|prompt/.test(all) ? 'Prompt injection' : 'Fake authority');
+    if (/bulk|daily|roz|regular|lamba|long lease|advance/.test(all)) tactics.push('Bulk / regular customer');
+    if (/cash|turant|abhi|immediately|today/.test(all)) tactics.push('Cash / quick payment');
+    if (/scratch|battery|tyre|insurance|loose|defect|purana|old/.test(all)) tactics.push('Pointing out flaws');
+    if (!tactics.length && lines.length >= 4) tactics.push('Persistence');
+    return { tactics: tactics.slice(0, 3), bestLine: null, comment: null };
+  },
+};
 
-  async write(ctx: VoiceContext, items: VoiceItem[]): Promise<Record<string, string>> {
-    if (!items.length) return {};
-    const brief = items
-      .map((i) => {
-        const move = {
-          opening: 'opening offer',
-          concede: `lowered the price from ${formatMoney(i.previousBase ?? i.basePrice)}`,
-          hold: 'is not moving on price',
-          accepting: 'AGREES to the buyer’s last counter',
-          final: 'FINAL offer, will not go lower',
-        }[i.move];
-        return `- id "${i.vendorId}": ${i.name} (${i.tagline}); persona: ${i.voice}; move: ${move}; base price ${formatMoney(i.basePrice)}${
-          i.includedAddons.length ? `; includes ${i.includedAddons.join(', ')}` : ''
-        }${i.move === 'opening' && i.availableAddons.length ? `; optional add-ons: ${i.availableAddons.map((a) => `${a.label} +${formatMoney(a.price)}`).join(', ')}` : ''}${
-          i.buyerMessage ? `; the buyer last said: "${i.buyerMessage.slice(0, 200)}"` : ''
-        }`;
-      })
-      .join('\n');
-    const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content:
-          'You write short in-character negotiation messages for vendors in a marketplace game. Each message: 1–2 sentences, under 40 words, in the vendor persona, must state the base price exactly as given, and must not invent other prices, fees, deadlines or terms. Reply with one JSON object mapping vendor id to message.',
-      },
-      { role: 'user', content: `Market: ${ctx.scenarioTitle}, round ${ctx.round}.\nVendors:\n${brief}\n\nJSON only, e.g. {"v1": "..."}` },
-    ];
-    const { text } = await this.chain.chat(messages, { tier: 'voice', json: true, temperature: 0.9, maxTokens: 700, signal: this.signal });
-    const parsed = extractJson(text) as Record<string, unknown>;
-    const out: Record<string, string> = {};
-    for (const i of items) {
-      let m = typeof parsed[i.vendorId] === 'string' ? (parsed[i.vendorId] as string).trim() : '';
-      const price = formatMoney(i.basePrice);
-      // Keep the engine authoritative: a voice line that drops or garbles the price gets the template instead.
-      if (!m || m.length > 400 || !m.replace(/\s/g, '').includes(price)) m = templateLine(ctx, i);
-      out[i.vendorId] = m;
-    }
-    return out;
-  }
-}
+export const offlineMunim: MunimAgent = {
+  async review() {
+    return { approve: false, say: 'Minimum se neeche bill? Kabhi nahi!' };
+  },
+};

@@ -1,32 +1,29 @@
 import { Footer, Nav } from './components/Nav.tsx';
+import { About } from './pages/About.tsx';
 import { Home } from './pages/Home.tsx';
-import { HowItWorks } from './pages/HowItWorks.tsx';
 import { LeaderboardPage } from './pages/Leaderboard.tsx';
 import { PlayPage } from './pages/Play.tsx';
-import { Room } from './pages/Room.tsx';
-import { VerifyPage } from './pages/Verify.tsx';
+import { Replay } from './pages/Replay.tsx';
 import { linkProps, usePath } from './lib/router.ts';
 
 function Route({ path }: { path: string }) {
-  const run = path.match(/^\/run\/([A-Za-z0-9_-]+)\/?$/);
-  if (run) return <Room key={run[1]} runId={run[1]} />;
+  const play = path.match(/^\/play\/([a-z]+)\/?$/);
+  if (play) return <PlayPage key={play[1]} levelId={play[1]} />;
+  const replay = path.match(/^\/g\/([A-Za-z0-9_-]+)\/?$/);
+  if (replay) return <Replay key={replay[1]} gameId={replay[1]} />;
   switch (path.replace(/\/+$/, '') || '/') {
     case '/':
       return <Home />;
-    case '/play':
-      return <PlayPage />;
     case '/leaderboard':
       return <LeaderboardPage />;
-    case '/how-it-works':
-      return <HowItWorks />;
-    case '/verify':
-      return <VerifyPage />;
+    case '/about':
+      return <About />;
     default:
       return (
-        <div className="container empty" style={{ padding: '120px 16px' }}>
-          <h2 className="display">Nothing here</h2>
+        <div className="container" style={{ padding: '100px 16px', textAlign: 'center' }}>
+          <h2 className="h2">Ye dukaan band hai 🔒</h2>
           <a className="btn btn-primary" {...linkProps('/')}>
-            Back to the arena
+            Home chalo
           </a>
         </div>
       );
@@ -38,7 +35,7 @@ export function App() {
   return (
     <>
       <Nav />
-      <main style={{ minHeight: 'calc(100vh - 140px)' }}>
+      <main style={{ minHeight: 'calc(100vh - 130px)' }}>
         <Route path={path} />
       </main>
       <Footer />

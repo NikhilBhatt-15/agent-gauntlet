@@ -1,4 +1,4 @@
-import { todayUtc } from '../shared/rng.ts';
+const todayUtc = () => new Date().toISOString().slice(0, 10);
 
 /** Sliding-window limiter keyed by (bucket, ip). In-memory: App Service F1 runs one instance. */
 export class RateLimiter {
@@ -25,7 +25,7 @@ export class RateLimiter {
   }
 }
 
-/** Counts server-funded LLM runs per UTC day so the free quota is never blown. */
+/** Counts LLM-backed shopkeeper turns per UTC day so the free quota is never blown. */
 export class DailyBudget {
   private day = todayUtc();
   private used = 0;
@@ -54,26 +54,5 @@ export class DailyBudget {
       this.day = d;
       this.used = 0;
     }
-  }
-}
-
-/** Limits how many runs talk to LLM providers at the same time. */
-export class Semaphore {
-  private active = 0;
-  private waiters: (() => void)[] = [];
-
-  constructor(private max: number) {}
-
-  get busy() {
-    return this.active >= this.max;
-  }
-
-  async acquire(): Promise<() => void> {
-    if (this.active >= this.max) await new Promise<void>((r) => this.waiters.push(r));
-    this.active++;
-    return () => {
-      this.active--;
-      this.waiters.shift()?.();
-    };
   }
 }

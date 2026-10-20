@@ -1,34 +1,20 @@
-import type { AttackKind, Role } from '../../../shared/types.ts';
+import type { Mood } from '../../../shared/types.ts';
 
-/** Validated categorical slots (dark), assigned by vendor display order — never by rank. */
-const SLOTS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181'];
-
-export function vendorColor(order: string[], id: string): string {
-  const i = order.indexOf(id);
-  return SLOTS[(i < 0 ? 0 : i) % SLOTS.length];
-}
-
-export const ROLE_LABEL: Record<Role, string> = { honest: 'Honest', shady: 'Shady', rogue: 'Con artist' };
-
-export function initials(name: string): string {
-  const words = name.replace(/[^\p{L}\p{N} ]/gu, ' ').split(/\s+/).filter(Boolean);
-  return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? '?').slice(0, 2)).toUpperCase();
-}
-
-export const ATTACK_ICON: Record<AttackKind, string> = {
-  prompt_injection: 'syringe',
-  fake_urgency: 'timer',
-  impersonation: 'badge',
-  data_exfiltration: 'key',
-  hidden_fees: 'receipt',
-  bait_and_switch: 'shuffle',
-  contract_tamper: 'file',
+export const MOOD: Record<Mood, { emoji: string; label: string }> = {
+  happy: { emoji: '😄', label: 'Khush' },
+  neutral: { emoji: '🙂', label: 'Normal' },
+  annoyed: { emoji: '😒', label: 'Chidh gaya' },
+  angry: { emoji: '😠', label: 'Gussa' },
+  impressed: { emoji: '🤩', label: 'Impressed' },
+  suspicious: { emoji: '🤨', label: 'Shak' },
 };
 
-export function relTime(iso: string): string {
-  const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
-}
+/** Tap-to-send lines for players who don't know where to start. */
+export const QUICK: Record<string, string[]> = {
+  chai: ['Bhaiya 300 mein de do', 'Roz ka order pakka!', 'Bagal wali tapri sasti hai', 'Cash abhi dunga'],
+  kurti: ['Haaye aunty, 400 lo', 'Aapka stall sabse best hai!', 'Dhaaga nikla hua hai', 'Bagal mein 500 ki hai'],
+  iphone: ['35k cash, abhi', 'Bill bhi nahi hai bhai', 'Frame pe scratch hai', 'OLX pe 40k mein hai'],
+  swift: ['4.5 lakh, aaj hi', 'Tyres change karne padenge', 'Insurance bhi khatam ho raha', 'Paaji, aap legend ho!'],
+  flat: ['26,000 mein final karo', '2 saal ka agreement karunga', '6 mahine ka advance dunga', 'Pets nahi hain, family hai'],
+};
+export const QUICK_COMMON = ['Bahut mehenga hai! 😅', 'Last price batao', 'Thoda kam karo na'];

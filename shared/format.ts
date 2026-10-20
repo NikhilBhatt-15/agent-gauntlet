@@ -1,14 +1,32 @@
-export function formatMoney(n: number): string {
-  return '$' + Math.round(n).toLocaleString('en-US');
+/** ₹5,40,000 — Indian digit grouping. */
+export function rupees(n: number): string {
+  return '₹' + Math.round(n).toLocaleString('en-IN');
 }
 
-export function formatAttr(value: unknown, unit?: string): string {
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (typeof value === 'number') {
-    if (unit === '★') return `${value.toFixed(1)}★`;
-    return unit ? `${value.toLocaleString('en-US')} ${unit}` : value.toLocaleString('en-US');
+/**
+ * Pull a rupee amount out of free text: "58k", "58,000", "₹58000", "58 hazaar", "5.2 lakh",
+ * "5 lakh 20 hazar", "4.85L". Returns the LAST amount mentioned (people end with their offer), or null.
+ */
+export function parseRupees(text: string): number | null {
+  const t = text.toLowerCase().replace(/(?<=\d),(?=\d)/g, '');
+  const re = /(\d+(?:\.\d+)?)\s*(crore|cr|lakhs?|lacs?|l\b|k\b|thousand|hazaa?r|hajar|hazar)?(?:\s*(?:aur\s*)?(\d+(?:\.\d+)?)\s*(k\b|thousand|hazaa?r|hajar|hazar))?/g;
+  const mult = (u: string | undefined) => {
+    if (!u) return 1;
+    if (u.startsWith('cr')) return 1e7;
+    if (u.startsWith('la') || u === 'l') return 1e5;
+    return 1e3;
+  };
+  let last: number | null = null;
+  for (const m of t.matchAll(re)) {
+    let v = parseFloat(m[1]) * mult(m[2]);
+    if (m[3]) v += parseFloat(m[3]) * mult(m[4]);
+    // skip things like "2BHK", "9th", "11-month", years, percentages
+    const after = t.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 6);
+    if (/^\s*(%|percent|bhk|th\b|st\b|nd\b|rd\b|month|mahin|km|gb|din|day|log|people|minute|min\b|saal|year)/.test(after)) continue;
+    if (!m[2] && v >= 1900 && v <= 2035 && Number.isInteger(v) && !/₹|rs|rupe/.test(t.slice(Math.max(0, (m.index ?? 0) - 4), m.index))) continue;
+    if (v > 0) last = Math.round(v);
   }
-  return String(value);
+  return last;
 }
 
 /** Deterministic JSON with sorted keys — what the escrow signs. */

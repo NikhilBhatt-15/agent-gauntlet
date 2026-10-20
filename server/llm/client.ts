@@ -57,7 +57,7 @@ export async function chatOnce(p: ProviderSpec, messages: ChatMessage[], opts: C
         headers: {
           'Content-Type': 'application/json',
           ...(p.apiKey ? { Authorization: `Bearer ${p.apiKey}` } : {}),
-          ...(p.id === 'openrouter' ? { 'HTTP-Referer': 'https://github.com/NikhilBhatt-15/agent-gauntlet', 'X-Title': 'Agent Gauntlet' } : {}),
+          ...(p.id === 'openrouter' ? { 'HTTP-Referer': 'https://github.com/NikhilBhatt-15/molbhav', 'X-Title': 'Mol-Bhav' } : {}),
         },
         body: JSON.stringify({
           model,

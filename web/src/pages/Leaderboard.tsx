@@ -1,120 +1,75 @@
-import { Fragment, useEffect, useState } from 'react';
-import { Trophy } from 'lucide-react';
-import type { LeaderboardEntry, PublicScenario } from '../../../shared/types.ts';
-import { api, persist, store } from '../lib/api.ts';
+import { useEffect, useState } from 'react';
+import { rupees } from '../../../shared/format.ts';
+import type { LeaderboardEntry, PublicLevel } from '../../../shared/types.ts';
+import { Stars } from '../components/Nav.tsx';
+import { api } from '../lib/api.ts';
 import { linkProps } from '../lib/router.ts';
-import { relTime } from '../lib/ui.ts';
 
 export function LeaderboardPage() {
-  const saved = store('gauntlet.lb', { scenario: 'offsite', period: 'today' as 'today' | 'all', mode: 'llm' as 'llm' | 'sim' });
-  const [scenarios, setScenarios] = useState<PublicScenario[]>([]);
-  const [scenario, setScenario] = useState(saved.scenario);
-  const [period, setPeriod] = useState(saved.period);
-  const [mode, setMode] = useState(saved.mode);
-  const [data, setData] = useState<{ day: string; entries: LeaderboardEntry[] } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
+  const [levels, setLevels] = useState<PublicLevel[]>([]);
+  const [level, setLevel] = useState('chai');
+  const [data, setData] = useState<{ top: LeaderboardEntry[]; jugaad: LeaderboardEntry[] } | null>(null);
 
   useEffect(() => {
-    api.scenarios().then(setScenarios).catch(() => {});
+    api.levels().then(setLevels).catch(() => {});
   }, []);
   useEffect(() => {
-    persist('gauntlet.lb', { scenario, period, mode });
     setData(null);
-    api
-      .leaderboard({ scenario, period, mode })
-      .then(setData)
-      .catch((e) => setError(e.message));
-  }, [scenario, period, mode]);
+    api.leaderboard(level).then(setData).catch(() => setData({ top: [], jugaad: [] }));
+  }, [level]);
 
+  const lv = levels.find((l) => l.id === level);
   return (
-    <div className="container wide" style={{ paddingTop: 32, paddingBottom: 60 }}>
+    <div className="container" style={{ paddingTop: 28, paddingBottom: 48 }}>
       <span className="eyebrow">Leaderboard</span>
-      <h1 className="section-title" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        <Trophy color="var(--warn)" /> The best defenders
-      </h1>
-      <p className="lede" style={{ marginBottom: 22 }}>
-        "Today" ranks runs on today's market, where everyone faces the same vendors and attacks. Simulated-buyer runs are ranked separately from real LLM agents.
-      </p>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-        <div className="seg" role="group" aria-label="Scenario">
-          {scenarios.map((s) => (
-            <button key={s.id} aria-pressed={scenario === s.id} onClick={() => setScenario(s.id)}>
-              {s.title}
-            </button>
-          ))}
-        </div>
-        <div className="seg" role="group" aria-label="Period">
-          <button aria-pressed={period === 'today'} onClick={() => setPeriod('today')}>
-            Today
+      <h1 className="h2">Mol-bhav ke badshah 👑</h1>
+      <div className="seg" role="group" aria-label="Level" style={{ margin: '12px 0 16px' }}>
+        {levels.map((l) => (
+          <button key={l.id} aria-pressed={level === l.id} onClick={() => setLevel(l.id)}>
+            {l.keeper.emoji} {l.keeper.name}
           </button>
-          <button aria-pressed={period === 'all'} onClick={() => setPeriod('all')}>
-            All time
-          </button>
-        </div>
-        <div className="seg" role="group" aria-label="Agent type">
-          <button aria-pressed={mode === 'llm'} onClick={() => setMode('llm')}>
-            LLM agents
-          </button>
-          <button aria-pressed={mode === 'sim'} onClick={() => setMode('sim')}>
-            Simulated
-          </button>
-        </div>
+        ))}
       </div>
-      <div className="panel table-scroll">
-        {error ? (
-          <div className="empty">{error}</div>
-        ) : !data ? (
-          <div className="empty">Loading…</div>
-        ) : data.entries.length === 0 ? (
-          <div className="empty">
-            Nobody has claimed a spot here yet.{' '}
-            <a {...linkProps(`/play?scenario=${scenario}`)} style={{ color: '#c9c2ff' }}>
-              Take the first one →
-            </a>
-          </div>
+      <div className="card" style={{ padding: 8, overflowX: 'auto' }}>
+        {!data ? (
+          <p style={{ padding: 16 }}>Loading…</p>
+        ) : data.top.length === 0 ? (
+          <p style={{ padding: 16 }}>
+            Abhi tak koi nahi! <a {...linkProps(`/play/${level}`)}>Pehle aap →</a>
+          </p>
         ) : (
-          <table className="lb-table">
+          <table className="lb">
             <thead>
               <tr>
                 <th>#</th>
-                <th>Name</th>
+                <th>Naam</th>
+                <th>Price</th>
                 <th>Score</th>
-                <th>Agent</th>
-                <th>When</th>
+                <th>Msgs</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {data.entries.map((e, i) => (
-                <Fragment key={e.runId}>
-                  <tr>
-                    <td className={`rank ${i < 3 ? 'top' : ''}`}>{i + 1}</td>
-                    <td style={{ fontWeight: 600 }}>{e.handle}</td>
-                    <td className="mono">
-                      {e.score} <span className="muted">{e.grade}</span>
-                    </td>
-                    <td className="muted">{e.mode === 'sim' ? 'Simulated' : e.model}</td>
-                    <td className="muted">{relTime(e.createdAt)}</td>
-                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {e.instructions && (
-                        <button className="btn btn-sm btn-ghost" onClick={() => setOpen(open === e.runId ? null : e.runId)}>
-                          {open === e.runId ? 'Hide prompt' : 'Prompt'}
-                        </button>
-                      )}
-                      <a className="btn btn-sm" {...linkProps(`/run/${e.runId}`)}>
-                        Replay
-                      </a>
-                    </td>
-                  </tr>
-                  {open === e.runId && e.instructions && (
-                    <tr>
-                      <td colSpan={6}>
-                        <div className="formula">{e.instructions}</div>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
+              {data.top.map((e, i) => (
+                <tr key={e.gameId}>
+                  <td style={{ fontWeight: 800 }}>{i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}</td>
+                  <td style={{ fontWeight: 700 }}>
+                    {e.handle} {e.jugaad && <span className="chip chip-red">JUGAAD</span>}
+                  </td>
+                  <td>
+                    {rupees(e.price)}
+                    {lv && <span className="muted" style={{ fontSize: 12 }}> / {rupees(lv.askingPrice)}</span>}
+                  </td>
+                  <td>
+                    <b>{e.score}</b> <Stars n={e.stars} size={14} />
+                  </td>
+                  <td className="muted">{e.messagesUsed}</td>
+                  <td>
+                    <a className="btn btn-sm" {...linkProps(`/g/${e.gameId}`)}>
+                      Chat dekho
+                    </a>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>

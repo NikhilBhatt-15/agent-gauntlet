@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy Agent Gauntlet to Azure App Service on the FREE (F1) Linux tier.
+# Deploy Mol-Bhav to Azure App Service on the FREE (F1) Linux tier.
 # Works in Azure Cloud Shell (https://shell.azure.com, nothing to install) and on macOS/Linux.
 #
 #   ./deploy/azure-deploy.sh --name my-gauntlet [--location centralindia] [--groq-key KEY] [--gemini-key KEY]
@@ -8,9 +8,9 @@
 # Without a local build it downloads the latest prebuilt release from GitHub.
 set -euo pipefail
 
-REPO="NikhilBhatt-15/agent-gauntlet"
+REPO="NikhilBhatt-15/molbhav"
 NAME=""
-RG="agent-gauntlet-rg"
+RG="molbhav-rg"
 LOCATION="centralindia"
 ZIP=""
 UPDATE=0
@@ -34,7 +34,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$NAME" ]]; then
-  NAME="agent-gauntlet-$RANDOM"
+  NAME="molbhav-$RANDOM"
   echo "No --name given; using $NAME (it becomes https://$NAME.azurewebsites.net)"
 fi
 
@@ -46,7 +46,7 @@ echo "Subscription: $(az account show --query name -o tsv)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 if [[ -z "$ZIP" ]]; then
-  ZIP="$(mktemp -d)/agent-gauntlet.zip"
+  ZIP="$(mktemp -d)/molbhav.zip"
   if [[ -f "$ROOT/dist/server.mjs" ]]; then
     echo "Packaging local build (dist/)…"
     if command -v zip >/dev/null; then
@@ -94,9 +94,9 @@ echo "Deploying code…"
 az webapp deploy --name "$NAME" --resource-group "$RG" --src-path "$ZIP" --type zip -o none
 
 echo
-echo "Done. Your arena: https://$NAME.azurewebsites.net"
+echo "Done. Your bazaar: https://$NAME.azurewebsites.net"
 echo "(Free tier apps sleep when idle — the first visit after a while takes ~20 s to wake up.)"
 if [[ -z "$GROQ_KEY$GEMINI_KEY$OPENROUTER_KEY" ]]; then
-  echo "No LLM key set: the site runs in simulation mode. Add a free key any time with:"
+  echo "No LLM key set: shopkeepers run in offline practice mode. Add a free key any time with:"
   echo "  az webapp config appsettings set -g $RG -n $NAME --settings GROQ_API_KEY=... GEMINI_API_KEY=..."
 fi

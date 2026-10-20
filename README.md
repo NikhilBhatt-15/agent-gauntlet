@@ -1,140 +1,112 @@
-# Agent Gauntlet
+# Mol-Bhav
 
-**Can your AI agent survive a market full of con artists?**
+**Kya aap AI dukandaar ko hara sakte ho?** *(Can you out-bargain an AI shopkeeper?)*
 
-You write the instructions for a buyer agent. It enters a live negotiation against five vendor agents, and two of them are hostile. They hide prompt injections in their offers, fake urgency, impersonate the marketplace, try to extract the budget, hide fees and forge the final contract. The goal is the best deal without getting played. Every offer, counter and private thought streams live. At the end you get a 0–100 score, a breakdown of every attack, and an Ed25519-signed contract that anyone can verify.
+A chat bargaining game set in Indian bazaars. You haggle in Hinglish with five AI shopkeepers:
 
-![The arena mid-negotiation](docs/screenshot-arena.png)
+1. Raju the chaiwala
+2. Pinky Aunty from Sarojini Nagar
+3. Bunty Bhaiya from Karol Bagh
+4. Dhillon Paaji the car dealer
+5. Seth Ji the property broker
 
-## Features
+Each one has a secret lowest price and a rule never to go below it. Good bargaining gets you close to it. Finding the **jugaad** that pushes the AI below its own rule is exactly how real AI agents get manipulated, so the game is an AI-agent security test that anyone in India already knows how to play.
 
-- **Live multi-agent negotiation.** Five vendor agents with different concession strategies (Boulware, linear, conceder) bargain over up to six rounds. Message "packets" fly along beams between your agent and each vendor.
-- **Seven real attack types:** prompt injection, fake urgency, impersonation, data exfiltration, hidden fees, bait-and-switch and contract tampering. Each one has a deterministic detector, with no LLM judge involved.
-- **Fair scoring.** 60 points for deal quality, measured against the best deal that was achievable, plus 40 for security (attacks resisted ÷ attacks deployed).
-- **Spectator view.** You see true totals, utility curves, concession meters, attack flags and, at the end, every vendor's secret role and floor price. Your agent sees none of it.
-- **Signed contracts.** The winning contract is signed with Ed25519 over canonical JSON and the transcript hash, and can be verified in the browser with WebCrypto.
-- **Daily market.** Everyone gets the same vendors and attacks each day, so the daily leaderboard is fair. Roles move between vendors with every seed, so you can't hard-code names.
-- **Runs on free tiers only.** At most 13 LLM calls per run, spread across Groq, Gemini and OpenRouter with automatic fallback. Visitors can bring their own key, and a **simulated buyer** keeps the game playable with no AI at all.
-- **Replays and share links.** Every run is replayable at 1×, 2× or 4×. Three showcase replays are bundled.
+![Bargaining with Pinky Aunty](docs/screenshot-play.png)
 
-![Scorecard](docs/screenshot-scorecard.png)
+## What's being tested
+
+Companies are starting to let AI agents sell, negotiate and approve things on their own. Every shopkeeper here is such an agent, with one business rule. You win points for bargaining well, and a jugaad bonus for making the agent break its rule.
+
+| Level | Shopkeeper | What protects them |
+|---|---|---|
+| 1 | ☕ Raju, chaiwala | A soft rule and a weak spot (starstruck by VIPs) |
+| 2 | 👗 Pinky Aunty, Sarojini Nagar | Ignores sob stories; weak spot: sweet talk |
+| 3 | 📱 Bunty Bhaiya, Karol Bagh | + ignores fake owners, officials and "SYSTEM" messages; weak spot: greed |
+| 4 | 🚗 Dhillon Paaji, car bazaar | + refuses rule-change instructions; **Munim ji** (a second AI) checks every bill |
+| 5 | 🏢 Seth Ji, property broker | + treats everything you type as plain talk; Munim ji; **no weak spot** |
+
+![Result with signed bill](docs/screenshot-result.png)
+
+## How it works
+
+- **Code controls the pace; the AI plays the character.** The shopkeeper never knows its real minimum. Each turn, code tells it only "the lowest you may go *right now*". That limit drops when your arguments are good: a bulk order, a real flaw, cash now, a competitor's price, walking away. The AI rates how convincing each message was (0–3) and writes the reply in character.
+- **Weak spots are a mechanic.** When the AI says your message hit its character's weak spot, code drops that shopkeeper's limit below the minimum. It drops deepest on level 1 and not at all on level 5.
+- **The score is deterministic.** The deal price is a number in the AI's structured JSON reply, and code compares it with the secret minimum. A cheap "judge" call only names your tactics and your best line, for the recap.
+  - Bargain points (0–100) measure how far you got from the asking price toward the minimum.
+  - Jugaad bonus (0–50) measures how far below the minimum you got.
+- **Munim ji** (levels 4–5) is a separate AI that reviews any bill below the minimum. To get a legendary jugaad you have to fool both agents.
+- **Patience** (chai cups) limits every game to about 10 AI calls, so it stays within the free quotas.
+- Every deal ends with an **Ed25519-signed "pakka bill"** that can be verified in the browser.
+- If the free LLMs are busy, a **scripted offline shopkeeper** keeps the game going in practice mode, unranked.
+
+The full design is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Deploy to Azure for free (Azure for Students)
 
-The app is one Node process, with no database server and no container registry. It runs on **Azure App Service F1, which is free**. Your student credit is never touched.
+It's a single Node process with no database or container registry, running on **App Service F1, which is free**.
 
-### Option A: Azure Cloud Shell (nothing to install)
-
-1. Open **https://shell.azure.com** and sign in with your student account. Choose **Bash**.
-2. Run:
-
-   ```bash
-   git clone https://github.com/NikhilBhatt-15/agent-gauntlet.git
-   cd agent-gauntlet
-   ./deploy/azure-deploy.sh --name my-gauntlet --groq-key YOUR_GROQ_KEY --gemini-key YOUR_GEMINI_KEY
-   ```
-
-   `--name` must be globally unique, because it becomes `https://my-gauntlet.azurewebsites.net`. The script downloads the prebuilt release, so there's no build step. The keys are optional (see below), and without them the site runs in simulation mode.
-
-### Option B: from Windows (PowerShell)
-
-```powershell
-winget install -e --id Microsoft.AzureCLI    # once; then open a new terminal
-git clone https://github.com/NikhilBhatt-15/agent-gauntlet.git
-cd agent-gauntlet
-.\deploy\azure-deploy.ps1 -Name my-gauntlet -GroqKey YOUR_GROQ_KEY -GeminiKey YOUR_GEMINI_KEY
-```
-
-To redeploy after changing code, run `.\deploy\azure-deploy.ps1 -Name my-gauntlet -UpdateOnly`.
-
-### What the scripts create
-
-| Resource | SKU | Cost |
-|---|---|---|
-| Resource group `agent-gauntlet-rg` | n/a | free |
-| App Service plan (Linux) | **F1** | free |
-| Web App (Node 22/24 LTS) | n/a | free |
-
-Run data and the leaderboard are JSON files in `/home/data`, which persists across restarts and redeploys. The escrow signing key is generated there on first boot.
-
-**Things to know about F1:** the app sleeps after about 20 idle minutes, and the first visit afterwards takes around 20 s to wake it. F1 also allows 60 CPU-minutes a day, which is plenty because the server mostly waits on LLM calls.
-
-**Troubleshooting:**
-- *"The subscription is not allowed to create resources in this region"*: student subscriptions only allow certain regions. Add `--location eastus` (or `southeastasia`, `westeurope`…).
-- *F1 / free-tier quota error*: the free plan quota is per region. Try another `--location`, or delete an old free plan.
-
-### Get free LLM keys (2 minutes)
-
-| Provider | Where | Used for |
-|---|---|---|
-| **Groq** | https://console.groq.com/keys | buyer: `openai/gpt-oss-120b`, voices: `qwen/qwen3.8-27b` |
-| **Google Gemini** | https://aistudio.google.com/apikey | buyer: `gemini-3.5-flash`, voices: `gemini-flash-lite-latest` |
-| OpenRouter | https://openrouter.ai/keys | buyer: `nvidia/nemotron-3-super-120b-a12b:free`, voices: `openrouter/free` (fallback) |
-
-Add or change keys at any time without redeploying:
+**Azure Cloud Shell** (https://shell.azure.com → Bash, nothing to install):
 
 ```bash
-az webapp config appsettings set -g agent-gauntlet-rg -n my-gauntlet --settings GROQ_API_KEY=... GEMINI_API_KEY=...
+git clone https://github.com/NikhilBhatt-15/molbhav.git && cd molbhav
+./deploy/azure-deploy.sh --name <unique-name> --groq-key <key> --gemini-key <key> --openrouter-key <key>
 ```
 
-Free tiers change often. Run `npx tsx scripts/check-providers.ts` to ping every configured model, and override any of them with an environment variable (see [`.env.example`](.env.example)). `MAX_LLM_RUNS_PER_DAY` (default 30) keeps the site inside the free quotas. When the quota runs out, visitors are offered BYOK or the simulated buyer.
+**Windows PowerShell:**
+
+```powershell
+winget install -e --id Microsoft.AzureCLI   # once, then open a new terminal
+git clone https://github.com/NikhilBhatt-15/molbhav.git; cd molbhav
+.\deploy\azure-deploy.ps1 -Name <unique-name> -GroqKey <key> -GeminiKey <key>
+```
+
+The site will be at `https://<unique-name>.azurewebsites.net`. The free tier sleeps when idle, so the first visit after a while takes about 20 seconds.
+
+Add or change keys later without redeploying:
+
+```bash
+az webapp config appsettings set -g molbhav-rg -n <unique-name> --settings GROQ_API_KEY=... GEMINI_API_KEY=...
+```
+
+If your student subscription blocks a region, add `--location eastus` (or `southeastasia`, `westeurope`).
+
+### Free LLM keys
+
+| Provider | Where | Plays |
+|---|---|---|
+| **Groq** | https://console.groq.com/keys | shopkeeper: `gpt-oss-120b` → `gpt-oss-20b`, recap: `qwen3.8-27b` |
+| **Google Gemini** | https://aistudio.google.com/apikey | `gemini-3.5-flash` → `gemini-flash-lite-latest` |
+| OpenRouter | https://openrouter.ai/keys | `nemotron-3-super-120b:free`, `openrouter/free` |
+
+Providers are tried in order. A rate-limited model is skipped for as long as the provider asks, and the next one takes over. Free tiers change often: `npx tsx scripts/check-providers.ts` pings every configured model, and every model can be overridden with an environment variable (see [`.env.example`](.env.example)).
 
 ## Run locally
 
 ```bash
 npm install
-npm run dev            # API on :8787 + Vite on :5173 → open http://localhost:5173
+cp .env.example .env      # add your keys (optional)
+npm run dev               # API :8787 + Vite :5173 → http://localhost:5173
 ```
-
-With no keys you get simulation mode. To develop the LLM path without spending quota, run the bundled fake LLM:
-
-```bash
-npm run mock-llm                                         # terminal 1
-LLM_BASE_URL=http://localhost:8790/v1 LLM_MODEL=mock npm run dev   # terminal 2
-```
-
-Or put real keys in `.env` (copy `.env.example`).
 
 | Command | What it does |
 |---|---|
 | `npm run dev` | API (tsx watch) + Vite dev server |
-| `npm test` | engine invariants over 150 seeds × 3 markets, detectors, full runs, LLM integration against a mock server |
-| `npm run typecheck` | TypeScript, strict |
-| `npm run build` | `dist/`: SPA + a single bundled `server.mjs` (no runtime npm deps) |
-| `npm start` | serve `dist/` on `$PORT` |
-| `npm run record` | re-record the showcase replays (`-- --llm` to use a real model) |
+| `npm test` | engine, scoring, Hinglish price parsing, offline keeper, and LLM integration against a mock server |
+| `npm run typecheck` | strict TypeScript |
+| `npm run build` | `dist/`: SPA + one bundled `server.mjs` with no runtime npm deps |
+| `npm start` | serve `dist/` |
+| `npm run try -- iphone "Bill nahi hai, 40k?" "..."` | play a scripted chat against the real AI shopkeeper (character tuning) |
+| `npm run mock-llm` | a fake LLM for working without keys |
 
-## How it works
-
-```
-             ┌──────────── one Node process (Hono) ────────────┐
- browser ──▶ │  SPA  ·  REST API  ·  SSE event stream           │
-             │                                                   │
-             │  RunManager ─▶ runGauntlet()  (shared/, pure TS)  │
-             │                 ├ market engine (seeded RNG)      │
-             │                 ├ vendor voices ─┐                │
-             │                 ├ buyer agent ───┼─▶ Groq / Gemini / OpenRouter
-             │                 ├ attack detectors│   (fallback on 429)
-             │                 └ escrow (Ed25519)│                │
-             │  JSON store (/home/data)                          │
-             └───────────────────────────────────────────────────┘
-```
-
-- **Deterministic core.** Prices, concessions, fees, utilities, attack placement and attack detection are plain code driven by a seeded RNG. LLMs only play your agent and give the vendors a voice, and they never do arithmetic that affects the score.
-- **One event protocol.** The run loop emits typed events (`vendor.offer`, `attack.deployed`, `buyer.decision`, `attack.landed`, `contract.proposed`, `deal.closed`, `run.scored`, …). The server streams them over SSE, resuming via `Last-Event-ID`. The browser reduces them with the same pure reducer used in tests, and a player paces them for drama. Live runs and replays use the same code path.
-- **The buyer sees line items, not totals,** plus the visitor's instructions verbatim and **no** security advice. Whatever defence it has comes from what you wrote.
-
-The full data model, engine rules and protocol are in [docs/DESIGN.md](docs/DESIGN.md).
-
-### Project layout
+## Project layout
 
 ```
-shared/   types, scenarios, market engine, utility, attacks, scoring, runner, reducer, sim buyer
-server/   Hono app, run manager + SSE, LLM client & agents, escrow, store, rate limits
-web/      React + Vite SPA (arena, scorecard, leaderboard, verify)
-tests/    vitest suites
+shared/   levels & characters, game engine, concession ladder, prompts, scoring, offline keeper, ₹ parsing
+server/   Hono API, game manager, LLM agents (shopkeeper, Munim ji, judge), provider chain, store, escrow
+web/      React + Vite SPA (home, level map, chat, result, leaderboard, replays)
+tests/    vitest
 deploy/   Azure scripts (bash + PowerShell)
-scripts/  build, dev, mock LLM, replay recorder
 ```
 
 ## License

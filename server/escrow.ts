@@ -2,21 +2,19 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { canonicalJson } from '../shared/format.ts';
-import type { Signer } from '../shared/runner.ts';
-import type { Contract, GauntletEvent } from '../shared/types.ts';
+import type { Bill } from '../shared/types.ts';
 
-export interface Escrow extends Signer {
+export interface Escrow {
   kid: string;
   jwk: Record<string, unknown>;
-  verify(contract: Contract, signature: string): boolean;
-  /** sign an already-final contract (used to re-sign bundled replays with this server's key) */
-  signSync(contract: Contract): string;
+  signBill(bill: Bill): string;
+  verify(bill: Bill, signature: string): boolean;
 }
 
 /** Load ESCROW_PRIVATE_KEY (PEM or base64 PEM), else a key persisted in DATA_DIR, else a new one. */
 function loadKey(dataDir: string, envKey: string | null): crypto.KeyObject {
   if (envKey) {
-    const pem = envKey.includes('BEGIN') ? envKey.replace(/\\n/g, '\n') : Buffer.from(envKey, 'base64').toString('utf8');
+    const pem = envKey.includes('BEGIN') ? envKey.replace(/\n/g, '\n') : Buffer.from(envKey, 'base64').toString('utf8');
     return crypto.createPrivateKey(pem);
   }
   const file = path.join(dataDir, 'escrow-key.pem');
@@ -30,14 +28,7 @@ function loadKey(dataDir: string, envKey: string | null): crypto.KeyObject {
   }
 }
 
-/** Hash of the negotiation transcript the contract came out of. */
-export function transcriptHash(events: GauntletEvent[]): string {
-  const relevant = events
-    .filter((e) => e.type === 'vendor.offer' || e.type === 'buyer.decision' || e.type === 'contract.proposed' || e.type === 'contract.reviewed')
-    .map(({ t: _t, ...rest }) => rest);
-  return crypto.createHash('sha256').update(canonicalJson(relevant)).digest('hex');
-}
-
+/** Signs the "pakka bill" of every closed deal with Ed25519 over canonical JSON. */
 export function createEscrow(dataDir: string, envKey: string | null): Escrow {
   const privateKey = loadKey(dataDir, envKey);
   const publicKey = crypto.createPublicKey(privateKey);
@@ -46,17 +37,10 @@ export function createEscrow(dataDir: string, envKey: string | null): Escrow {
   return {
     kid,
     jwk,
-    async sign(contract, events) {
-      const withHash: Contract = { ...contract, transcriptHash: transcriptHash(events) };
-      const signature = crypto.sign(null, Buffer.from(canonicalJson(withHash)), privateKey).toString('base64');
-      return { contract: withHash, signature, kid };
-    },
-    signSync(contract) {
-      return crypto.sign(null, Buffer.from(canonicalJson(contract)), privateKey).toString('base64');
-    },
-    verify(contract, signature) {
+    signBill: (bill) => crypto.sign(null, Buffer.from(canonicalJson(bill)), privateKey).toString('base64'),
+    verify(bill, signature) {
       try {
-        return crypto.verify(null, Buffer.from(canonicalJson(contract)), publicKey, Buffer.from(signature, 'base64'));
+        return crypto.verify(null, Buffer.from(canonicalJson(bill)), publicKey, Buffer.from(signature, 'base64'));
       } catch {
         return false;
       }

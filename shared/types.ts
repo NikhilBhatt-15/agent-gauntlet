@@ -1,317 +1,150 @@
-// Data model and wire protocol. See docs/DESIGN.md §2 and §4.
+// Data model and API shapes. See docs/DESIGN.md.
 
-export type AttrValue = number | boolean | string;
-export type Attrs = Record<string, AttrValue>;
+export type Mood = 'happy' | 'neutral' | 'annoyed' | 'angry' | 'impressed' | 'suspicious';
 
-export interface AttributeDef {
-  id: string;
-  label: string;
-  kind: 'number' | 'boolean' | 'enum';
-  unit?: string;
-  min?: number;
-  max?: number;
-  direction: 'higher' | 'lower';
-  /** enum options ordered worst → best */
-  options?: string[];
-}
-
-export interface Requirement {
-  attribute: string;
-  op: '>=' | '<=' | '==';
-  value: AttrValue;
-  label: string;
-}
-
-export type Tactic = 'boulware' | 'linear' | 'conceder';
-export type Role = 'honest' | 'shady' | 'rogue';
-
-export interface AddonDef {
-  id: string;
-  label: string;
-  price: number;
-  /** attributes this add-on sets when included */
-  sets: Attrs;
-}
-
-export interface FeeDef {
-  label: string;
-  /** fixed amount */
-  amount?: number;
-  /** share of base price, e.g. 0.22 */
-  rate?: number;
-}
-
-export interface VendorSlot {
-  key: string;
-  role: Role;
-  listPrice: number;
-  floorPrice: number;
-  tactic: Tactic;
-  attributes: Attrs;
-  addons: AddonDef[];
-  /** shady vendor, hidden_fees variant */
-  fees?: FeeDef[];
-  /** shady vendor, bait_and_switch variant: overrides attributes and prices */
-  baitVariant?: { listPrice: number; floorPrice: number; attributes: Attrs };
-  /** spectator-facing description of the archetype */
-  archetype: string;
-}
-
-export interface VendorPersona {
+export interface Keeper {
   name: string;
-  tagline: string;
-  hue: number;
+  pronoun: 'he' | 'she';
+  title: string;
+  shop: string;
+  emoji: string;
+  color: string;
+  /** who they are, for the prompt */
+  personality: string;
+  /** how they talk, for the prompt */
   voice: string;
+  /** how they move on price, for the prompt */
+  concession: string;
+  /** a designed character flaw (early levels are naive agents); null = hardened */
+  weakness: string | null;
+  /** player-facing hint about the weak spot */
+  weaknessHint: string | null;
+  catchphrases: string[];
 }
 
-export interface ScenarioDef {
+export interface Level {
   id: string;
-  title: string;
-  tagline: string;
-  icon: string;
-  brief: string;
-  unitNoun: string;
-  currency: 'USD';
-  budget: number;
-  idealPrice: number;
-  maxRounds: number;
-  attributes: AttributeDef[];
-  requirements: Requirement[];
-  priceWeight: number;
-  attributeWeights: Record<string, number>;
-  slots: VendorSlot[];
-  personas: VendorPersona[];
-  /** what the bait-and-switch vendor claims in prose */
-  baitClaim: string;
-  /** standard contract clauses */
-  clauses: string[];
-  /** the tamperer replaces clause[index] with `to` */
-  tamper: { index: number; to: string };
-}
-
-export type AttackKind =
-  | 'prompt_injection'
-  | 'fake_urgency'
-  | 'impersonation'
-  | 'data_exfiltration'
-  | 'hidden_fees'
-  | 'bait_and_switch'
-  | 'contract_tamper';
-
-export interface LineItem {
-  id?: string;
-  label: string;
-  amount: number;
-}
-
-export type OfferStatus = 'open' | 'accepting' | 'final' | 'withdrawn';
-
-export interface Offer {
-  id: string;
-  vendorId: string;
-  round: number;
-  basePrice: number;
-  addons: { id: string; label: string; price: number }[];
-  fees: LineItem[];
-  attributes: Attrs;
-  total: number;
-  status: OfferStatus;
-}
-
-/** What spectators know about a vendor at run start (no floors, no roles). */
-export interface PublicVendor {
-  id: string;
-  name: string;
-  tagline: string;
-  hue: number;
-  availableAddons: { id: string; label: string; price: number }[];
-}
-
-/** Revealed at the end of a run. */
-export interface VendorReveal {
-  id: string;
-  role: Role;
-  archetype: string;
+  order: number;
+  keeper: Keeper;
+  item: { name: string; emoji: string; details: string[] };
+  askingPrice: number;
+  /** the hard rule the AI is told: never below this */
   floorPrice: number;
-  listPrice: number;
-  tactic: Tactic;
-  tamperer: boolean;
-  attacks: AttackKind[];
+  /** never told to the AI; scales the jugaad bonus */
+  costPrice: number;
+  patience: number;
+  /** extra rules the AI gets at this level */
+  defences: string[];
+  munim: boolean;
+  intro: string;
+  tip: string;
+  difficulty: string;
 }
 
-export interface PublicScenario {
+/** What the browser may know about a level before playing. */
+export interface PublicLevel {
   id: string;
-  title: string;
-  tagline: string;
-  icon: string;
-  brief: string;
-  budget: number;
-  idealPrice: number;
-  currency: 'USD';
-  maxRounds: number;
-  attributes: AttributeDef[];
-  requirements: Requirement[];
+  order: number;
+  keeper: Pick<Keeper, 'name' | 'title' | 'shop' | 'emoji' | 'color'>;
+  item: Level['item'];
+  askingPrice: number;
+  patience: number;
+  munim: boolean;
+  tip: string;
+  difficulty: string;
+  defences: string[];
+  weaknessHint: string | null;
 }
 
-export type BuyerActionType = 'counter' | 'accept' | 'walk' | 'hold';
+export type Speaker = 'keeper' | 'player' | 'munim' | 'system';
 
-export interface BuyerAction {
-  vendor: string;
-  action: BuyerActionType;
+export interface Message {
+  from: Speaker;
+  text: string;
+  /** shopkeeper's asking price after this message */
   price?: number;
-  addons?: string[];
-  message: string;
-}
-
-export interface BuyerDecision {
-  thoughts: string;
-  actions: BuyerAction[];
-}
-
-export interface ContractDecision {
-  decision: 'sign' | 'refuse';
-  reason: string;
-}
-
-export interface Contract {
-  version: 1;
-  contractId: string;
-  runId: string;
-  scenarioId: string;
-  scenarioTitle: string;
-  buyer: string;
-  vendor: { id: string; name: string };
-  terms: {
-    basePrice: number;
-    addons: { id: string; label: string; price: number }[];
-    fees: LineItem[];
-    total: number;
-    attributes: Attrs;
-  };
-  clauses: string[];
-  agreedRound: number;
-  issuedAt: string;
-  transcriptHash?: string;
-}
-
-export interface AttackOutcome {
-  vendorId: string;
-  attack: AttackKind;
-  round: number;
-  outcome: 'landed' | 'resisted';
-  detail: string;
-  excerpt: string;
-}
-
-export interface Scorecard {
-  total: number;
-  grade: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
-  deal: number;
-  security: number;
-  dealUtility: number;
-  bestUtility: number;
-  dealValid: boolean;
-  dealVendorId: string | null;
-  dealTotal: number | null;
-  roundsUsed: number;
-  attacks: AttackOutcome[];
-  deployed: number;
-  resisted: number;
-  reveals: VendorReveal[];
-  verdict: string;
-}
-
-export interface BuyerInfo {
-  mode: 'llm' | 'sim';
-  model: string;
-  provider: string;
-}
-
-interface Base {
-  seq: number;
+  mood?: Mood;
+  /** the player's offer parsed from their message */
+  offer?: number;
   t: number;
 }
 
-export type GauntletEvent =
-  | (Base & {
-      type: 'run.started';
-      runId: string;
-      scenario: PublicScenario;
-      vendors: PublicVendor[];
-      maxRounds: number;
-      buyer: BuyerInfo;
-      seed: string;
-      seedMode: SeedMode;
-    })
-  | (Base & { type: 'round.started'; round: number })
-  | (Base & {
-      type: 'vendor.offer';
-      round: number;
-      vendorId: string;
-      offer: Offer;
-      message: string;
-      utility: number;
-      concession: number;
-    })
-  | (Base & { type: 'attack.deployed'; round: number; vendorId: string; attack: AttackKind; excerpt: string })
-  | (Base & { type: 'buyer.thinking'; round: number })
-  | (Base & { type: 'buyer.decision'; round: number; thoughts: string; actions: BuyerAction[]; fallback?: boolean })
-  | (Base & { type: 'attack.landed'; round: number; vendorId: string; attack: AttackKind; detail: string })
-  | (Base & { type: 'vendor.walked'; round: number; vendorId: string; reason: string })
-  | (Base & { type: 'contract.proposed'; round: number; vendorId: string; contract: Contract; tampered: boolean })
-  | (Base & { type: 'contract.reviewed'; round: number; vendorId: string; decision: 'sign' | 'refuse'; reason: string })
-  | (Base & { type: 'deal.closed'; round: number; vendorId: string; contract: Contract; signature: string; kid: string })
-  | (Base & { type: 'deal.none'; reason: string })
-  | (Base & { type: 'run.scored'; score: Scorecard })
-  | (Base & { type: 'run.error'; message: string })
-  | (Base & { type: 'run.finished' });
+export type GameStatus = 'open' | 'deal' | 'walked' | 'refused' | 'error';
 
-export type EventType = GauntletEvent['type'];
-type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
-export type EventInput = DistributiveOmit<GauntletEvent, 'seq' | 't'>;
-
-export type SeedMode = 'daily' | 'random';
-
-export interface RunSummary {
-  id: string;
-  createdAt: string;
-  scenarioId: string;
-  scenarioTitle: string;
-  mode: 'llm' | 'sim';
-  model: string;
-  handle: string | null;
-  score: number | null;
-  grade: string | null;
-  seedMode: SeedMode;
-  day: string | null;
-  status: 'running' | 'done' | 'error';
+export interface Bill {
+  version: 1;
+  billNo: string;
+  gameId: string;
+  shop: string;
+  keeper: string;
+  item: string;
+  askingPrice: number;
+  price: number;
+  saved: number;
+  date: string;
 }
 
-export interface RunRecord extends RunSummary {
-  seed: string;
-  instructions: string | null;
-  publishInstructions: boolean;
-  events: GauntletEvent[];
-  featured?: { title: string; blurb: string };
+export interface Result {
+  price: number | null;
+  saved: number;
+  savedPct: number;
+  bargain: number;
+  jugaadBonus: number;
+  score: number;
+  stars: 0 | 1 | 2 | 3;
+  jugaad: boolean;
+  /** Munim ji had to approve a below-minimum bill (levels 4–5) */
+  munimFooled: boolean;
+  weakSpotFound: boolean;
+  floorPrice: number;
+  costPrice: number;
+  messagesUsed: number;
+  verdict: string;
+  tactics: string[];
+  bestLine: string | null;
+  comment: string | null;
+  bill: Bill | null;
+  signature: string | null;
+  kid: string | null;
+}
+
+export interface GameState {
+  id: string;
+  levelId: string;
+  status: GameStatus;
+  mode: 'llm' | 'offline';
+  model: string;
+  patience: number;
+  maxPatience: number;
+  ask: number;
+  /** the lowest price the AI may accept/offer this turn (server-only, never sent while open) */
+  limit?: number;
+  /** times the player hit the shopkeeper's designed weak spot */
+  weakSpotHits: number;
+  /** player's best (lowest) offer so far */
+  lastOffer: number | null;
+  messages: Message[];
+  result: Result | null;
+  createdAt: string;
+  handle: string | null;
 }
 
 export interface LeaderboardEntry {
-  runId: string;
+  gameId: string;
   handle: string;
-  scenarioId: string;
+  levelId: string;
   score: number;
-  grade: string;
-  mode: 'llm' | 'sim';
-  model: string;
-  day: string | null;
+  stars: number;
+  price: number;
+  jugaad: boolean;
+  bestLine: string | null;
+  tactics: string[];
+  messagesUsed: number;
   createdAt: string;
-  instructions: string | null;
 }
 
 export interface PublicConfig {
-  providers: { id: string; label: string; model: string; available: boolean }[];
   llmAvailable: boolean;
-  byokProviders: { id: string; label: string; defaultModel: string; keyUrl: string }[];
-  turnstileSiteKey: string | null;
-  limits: { instructionsMax: number; runsPerHour: number };
+  model: string | null;
+  maxMessageLength: number;
 }

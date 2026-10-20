@@ -25,11 +25,7 @@ await esbuild({
 });
 console.log('✓ server → dist/server.mjs');
 
-fs.mkdirSync(path.join(dist, 'featured'), { recursive: true });
-for (const f of fs.readdirSync('server/featured').filter((f) => f.endsWith('.json'))) {
-  fs.copyFileSync(path.join('server/featured', f), path.join(dist, 'featured', f));
-}
-console.log('✓ featured replays copied');
+
 
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 fs.writeFileSync(

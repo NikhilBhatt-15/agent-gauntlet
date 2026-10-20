@@ -1,8 +1,8 @@
 {
-  "name": "agent-gauntlet",
-  "version": "1.1.0",
+  "name": "molbhav",
+  "version": "2.0.0",
   "private": true,
-  "description": "Can your AI agent survive a market full of con artists? A live multi-agent negotiation arena with prompt-injection attacks, scoring and signed contracts.",
+  "description": "Mol-Bhav: bargain in Hinglish with AI shopkeepers and find the jugaad that makes an AI agent break its own rule.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -16,13 +16,12 @@
     "start": "node dist/server.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "record": "tsx scripts/record-featured.ts",
-    "mock-llm": "node scripts/mock-llm.mjs"
+    "mock-llm": "node scripts/mock-llm.mjs",
+    "try": "tsx scripts/try-keeper.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
     "hono": "^4.13.13",
-    "lucide-react": "^1.59.0",
     "motion": "^14.4.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

@@ -21,7 +21,7 @@ jobs:
       - name: Smoke-test the production bundle
         run: |
           cd dist
-          PORT=8080 DATA_DIR=/tmp/gauntlet node server.mjs &
+          PORT=8080 DATA_DIR=/tmp/molbhav node server.mjs &
           for i in $(seq 1 20); do curl -fs localhost:8080/api/health && break; sleep 0.5; done
           curl -fs localhost:8080/ | grep -q '<div id="root">'
           curl -fs -X POST localhost:8080/api/runs -H 'content-type: application/json' \

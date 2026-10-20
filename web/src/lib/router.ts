@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-/** Minimal history-API router: no dependency, works with the server's SPA fallback. */
+/** Minimal history-API router; the server falls back to index.html for every page. */
 export function navigate(to: string, replace = false) {
   if (to === location.pathname + location.search) return;
   history[replace ? 'replaceState' : 'pushState'](null, '', to);
@@ -18,12 +18,6 @@ export function usePath(): string {
   return path;
 }
 
-export function useQuery(): URLSearchParams {
-  usePath();
-  return new URLSearchParams(location.search);
-}
-
-/** Intercepts clicks on internal links. */
 export function linkProps(to: string) {
   return {
     href: to,

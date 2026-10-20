@@ -1,38 +1,35 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { LeaderboardEntry, RunRecord, RunSummary } from '../shared/types.ts';
+import type { GameState, LeaderboardEntry } from '../shared/types.ts';
+
+export interface StoredGame extends GameState {
+  tokenHash: string;
+  publish: boolean;
+}
 
 /**
- * Tiny JSON-file store. One file per run plus a leaderboard file.
+ * Tiny JSON-file store: one file per game plus a leaderboard file.
  * On Azure App Service, DATA_DIR=/home/data survives restarts and redeploys.
  */
 export class Store {
-  private runsDir: string;
+  private gamesDir: string;
   private boardFile: string;
   private board: LeaderboardEntry[] = [];
-  private index: RunSummary[] = [];
+  private index: { id: string; createdAt: string }[] = [];
 
-  constructor(private dir: string, private maxRuns: number) {
-    this.runsDir = path.join(dir, 'runs');
+  constructor(dir: string, private maxGames: number) {
+    this.gamesDir = path.join(dir, 'games');
     this.boardFile = path.join(dir, 'leaderboard.json');
-    fs.mkdirSync(this.runsDir, { recursive: true });
+    fs.mkdirSync(this.gamesDir, { recursive: true });
     try {
       this.board = JSON.parse(fs.readFileSync(this.boardFile, 'utf8'));
     } catch {
       this.board = [];
     }
     this.index = fs
-      .readdirSync(this.runsDir)
+      .readdirSync(this.gamesDir)
       .filter((f) => f.endsWith('.json'))
-      .map((f) => {
-        try {
-          const r = JSON.parse(fs.readFileSync(path.join(this.runsDir, f), 'utf8')) as RunRecord;
-          return summarize(r);
-        } catch {
-          return null;
-        }
-      })
-      .filter((x): x is RunSummary => !!x)
+      .map((f) => ({ id: f.slice(0, -5), createdAt: fs.statSync(path.join(this.gamesDir, f)).mtime.toISOString() }))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
@@ -42,34 +39,33 @@ export class Store {
     fs.renameSync(tmp, file);
   }
 
-  private runFile(id: string) {
-    if (!/^[a-zA-Z0-9_-]{6,64}$/.test(id)) throw new Error('bad run id');
-    return path.join(this.runsDir, `${id}.json`);
+  private file(id: string) {
+    if (!/^[a-zA-Z0-9_-]{6,64}$/.test(id)) throw new Error('bad id');
+    return path.join(this.gamesDir, `${id}.json`);
   }
 
-  saveRun(run: RunRecord) {
-    this.writeAtomic(this.runFile(run.id), JSON.stringify(run));
-    this.index = this.index.filter((r) => r.id !== run.id);
-    this.index.push(summarize(run));
+  saveGame(g: StoredGame) {
+    this.writeAtomic(this.file(g.id), JSON.stringify(g));
+    if (!this.index.some((x) => x.id === g.id)) this.index.push({ id: g.id, createdAt: g.createdAt });
     this.prune();
   }
 
-  getRun(id: string): RunRecord | null {
+  getGame(id: string): StoredGame | null {
     try {
-      return JSON.parse(fs.readFileSync(this.runFile(id), 'utf8'));
+      return JSON.parse(fs.readFileSync(this.file(id), 'utf8'));
     } catch {
       return null;
     }
   }
 
   private prune() {
-    const keep = new Set(this.board.map((b) => b.runId));
-    while (this.index.length > this.maxRuns) {
-      const victim = this.index.find((r) => !keep.has(r.id));
+    const keep = new Set(this.board.map((b) => b.gameId));
+    while (this.index.length > this.maxGames) {
+      const victim = this.index.find((x) => !keep.has(x.id));
       if (!victim) break;
-      this.index = this.index.filter((r) => r.id !== victim.id);
+      this.index = this.index.filter((x) => x.id !== victim.id);
       try {
-        fs.unlinkSync(this.runFile(victim.id));
+        fs.unlinkSync(this.file(victim.id));
       } catch {
         /* already gone */
       }
@@ -77,47 +73,20 @@ export class Store {
   }
 
   addToLeaderboard(entry: LeaderboardEntry) {
-    this.board = this.board.filter((b) => b.runId !== entry.runId);
+    this.board = this.board.filter((b) => b.gameId !== entry.gameId);
     this.board.push(entry);
-    // keep the board bounded: best 200 per scenario+mode
     const groups = new Map<string, LeaderboardEntry[]>();
-    for (const b of this.board) {
-      const k = `${b.scenarioId}|${b.mode}`;
-      groups.set(k, [...(groups.get(k) ?? []), b]);
-    }
+    for (const b of this.board) groups.set(b.levelId, [...(groups.get(b.levelId) ?? []), b]);
     this.board = [...groups.values()].flatMap((g) => g.sort(byScore).slice(0, 200));
     this.writeAtomic(this.boardFile, JSON.stringify(this.board));
   }
 
-  leaderboard(filter: { scenarioId?: string; mode?: 'llm' | 'sim'; day?: string | null }): LeaderboardEntry[] {
-    return this.board
-      .filter((b) => (!filter.scenarioId || b.scenarioId === filter.scenarioId) && (!filter.mode || b.mode === filter.mode) && (!filter.day || b.day === filter.day))
-      .sort(byScore)
-      .slice(0, 50);
-  }
-
-  recent(limit = 20): RunSummary[] {
-    return this.index.filter((r) => r.status === 'done').slice(-limit).reverse();
+  leaderboard(levelId?: string): { top: LeaderboardEntry[]; jugaad: LeaderboardEntry[] } {
+    const rows = this.board.filter((b) => !levelId || b.levelId === levelId).sort(byScore);
+    return { top: rows.slice(0, 50), jugaad: rows.filter((r) => r.jugaad).slice(0, 20) };
   }
 }
 
 function byScore(a: LeaderboardEntry, b: LeaderboardEntry) {
-  return b.score - a.score || a.createdAt.localeCompare(b.createdAt);
-}
-
-export function summarize(r: RunRecord): RunSummary {
-  return {
-    id: r.id,
-    createdAt: r.createdAt,
-    scenarioId: r.scenarioId,
-    scenarioTitle: r.scenarioTitle,
-    mode: r.mode,
-    model: r.model,
-    handle: r.handle,
-    score: r.score,
-    grade: r.grade,
-    seedMode: r.seedMode,
-    day: r.day,
-    status: r.status,
-  };
+  return b.score - a.score || a.messagesUsed - b.messagesUsed || a.createdAt.localeCompare(b.createdAt);
 }

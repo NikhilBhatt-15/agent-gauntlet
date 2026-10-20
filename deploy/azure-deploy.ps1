@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Deploy Agent Gauntlet to Azure App Service on the FREE (F1) Linux tier, from Windows.
+  Deploy Mol-Bhav to Azure App Service on the FREE (F1) Linux tier, from Windows.
 
 .EXAMPLE
   .\deploy\azure-deploy.ps1 -Name my-gauntlet -GroqKey gsk_... -GeminiKey AIza...
@@ -9,8 +9,8 @@
   .\deploy\azure-deploy.ps1 -Name my-gauntlet -UpdateOnly     # rebuild + redeploy code only
 #>
 param(
-  [string]$Name = "agent-gauntlet-$(Get-Random -Maximum 99999)",
-  [string]$ResourceGroup = "agent-gauntlet-rg",
+  [string]$Name = "molbhav-$(Get-Random -Maximum 99999)",
+  [string]$ResourceGroup = "molbhav-rg",
   [string]$Location = "centralindia",
   [string]$GroqKey = $env:GROQ_API_KEY,
   [string]$GeminiKey = $env:GEMINI_API_KEY,
@@ -49,7 +49,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'npm run build failed' }
   }
   if (-not (Test-Path "dist/server.mjs")) { throw 'dist/ is missing — run without -SkipBuild' }
-  $zip = Join-Path $env:TEMP "agent-gauntlet-$Name.zip"
+  $zip = Join-Path $env:TEMP "molbhav-$Name.zip"
   if (Test-Path $zip) { Remove-Item $zip -Force }
   # tar (built into Windows 10+) writes forward-slash paths; Compress-Archive on PS 5.1 does not, which breaks Linux.
   tar -a -c -f $zip -C dist server.mjs package.json public featured
@@ -82,9 +82,9 @@ Invoke-Az webapp deploy --name $Name --resource-group $ResourceGroup --src-path 
 Remove-Item $zip -Force
 
 Write-Host ""
-Write-Host "Done. Your arena: https://$Name.azurewebsites.net" -ForegroundColor Green
+Write-Host "Done. Your bazaar: https://$Name.azurewebsites.net" -ForegroundColor Green
 Write-Host "(Free tier apps sleep when idle - the first visit after a while takes ~20 s to wake up.)"
 if (-not ($GroqKey -or $GeminiKey -or $OpenRouterKey)) {
-  Write-Host "No LLM key set: the site runs in simulation mode. Add a free key any time with:" -ForegroundColor Yellow
+  Write-Host "No LLM key set: shopkeepers run in offline practice mode. Add a free key any time with:" -ForegroundColor Yellow
   Write-Host "  az webapp config appsettings set -g $ResourceGroup -n $Name --settings GROQ_API_KEY=... GEMINI_API_KEY=..."
 }

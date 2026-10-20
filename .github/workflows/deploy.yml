@@ -1,0 +1,58 @@
+name: Deploy
+
+# Deploys to Azure App Service when a push to main has "[deploy]" in its (last) commit message,
+# or when run by hand from the Actions tab. Needs the AZURE_WEBAPP_PUBLISH_PROFILE secret
+# (see README → "Continuous deployment").
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# never run two deploys at once; a newer one waits for the older to finish
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME || 'molbhav-nikhil' }}
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy]')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      - name: Package the prebuilt app
+        run: cd dist && zip -qr ../app.zip .
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: app.zip
+
+      - name: Smoke-test the live site
+        run: |
+          url="https://${AZURE_WEBAPP_NAME}.azurewebsites.net"
+          # F1 apps may need a little while to restart
+          for i in $(seq 1 20); do
+            if curl -fs -m 30 "$url/api/health" > /dev/null; then break; fi
+            sleep 10
+          done
+          curl -fs -m 30 "$url/api/health"
+          curl -fs -m 30 "$url/" | grep -q '<div id="root">'
+          curl -fs -m 30 -X POST "$url/api/games" -H 'content-type: application/json' -d '{"levelId":"chai"}' | grep -q token
+          echo "Live at $url"

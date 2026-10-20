@@ -11,7 +11,7 @@
 param(
   [string]$Name = "molbhav-$(Get-Random -Maximum 99999)",
   [string]$ResourceGroup = "molbhav-rg",
-  [string]$Location = "centralindia",
+  [string]$Location = "indiasouthcentral",
   [string]$GroqKey = $env:GROQ_API_KEY,
   [string]$GeminiKey = $env:GEMINI_API_KEY,
   [string]$OpenRouterKey = $env:OPENROUTER_API_KEY,

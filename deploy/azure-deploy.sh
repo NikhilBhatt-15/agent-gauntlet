@@ -11,7 +11,7 @@ set -euo pipefail
 REPO="NikhilBhatt-15/molbhav"
 NAME=""
 RG="molbhav-rg"
-LOCATION="centralindia"
+LOCATION="indiasouthcentral"
 ZIP=""
 UPDATE=0
 GROQ_KEY="${GROQ_API_KEY:-}"

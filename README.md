@@ -74,7 +74,28 @@ Add or change keys later without redeploying:
 az webapp config appsettings set -g molbhav-rg -n <unique-name> --settings GROQ_API_KEY=... GEMINI_API_KEY=...
 ```
 
-If your student subscription blocks a region, add `--location eastus` (or `southeastasia`, `westeurope`).
+The default region is `indiasouthcentral` (Hyderabad). Student subscriptions only allow certain regions. List yours with
+`az policy assignment list --query "[].parameters.listOfAllowedLocations.value" -o tsv` and pass one with `--location`.
+
+### Continuous deployment
+
+`.github/workflows/deploy.yml` tests, builds and deploys to Azure when a push to `main` has **`[deploy]`** in its last
+commit message, or when you run **Actions → Deploy → Run workflow** by hand. It then smoke-tests the live site.
+Ordinary pushes only run CI.
+
+One-time setup, in Azure Cloud Shell, gives GitHub the app's deployment credentials:
+
+```bash
+# allow publish-profile deployments for this app (they're off by default on new apps)
+az resource update -g molbhav-rg --namespace Microsoft.Web --resource-type basicPublishingCredentialsPolicies   --parent sites/<app-name> --name scm --set properties.allow=true
+# store the publish profile as a GitHub secret without it ever appearing on screen
+gh auth login
+az webapp deployment list-publishing-profiles -g molbhav-rg -n <app-name> --xml   | gh secret set AZURE_WEBAPP_PUBLISH_PROFILE -R <you>/molbhav
+# only if your app isn't called molbhav-nikhil:
+gh variable set AZURE_WEBAPP_NAME -b <app-name> -R <you>/molbhav
+```
+
+Then deploy with `git commit -m "Tweak Raju's lines [deploy]" && git push`.
 
 ### Free LLM keys
 

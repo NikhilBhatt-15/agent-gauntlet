@@ -1,0 +1,8 @@
+node_modules/
+dist/
+data/
+*.zip
+.env
+.env.*
+!.env.example
+*.log

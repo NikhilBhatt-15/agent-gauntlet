@@ -1,0 +1,42 @@
+{
+  "name": "agent-gauntlet",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Can your AI agent survive a market full of con artists? A live multi-agent negotiation arena with prompt-injection attacks, scoring and signed contracts.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:web": "vite",
+    "build": "node scripts/build.mjs",
+    "start": "node dist/server.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "record": "tsx scripts/record-featured.ts",
+    "mock-llm": "node scripts/mock-llm.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "hono": "^4.13.13",
+    "lucide-react": "^1.59.0",
+    "motion": "^14.4.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  }
+}

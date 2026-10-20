@@ -48,6 +48,7 @@ const WANT = {
 const out = path.resolve('web/public/fluent');
 fs.mkdirSync(out, { recursive: true });
 for (const [name, folder] of Object.entries(WANT)) {
+  // (images are then shrunk to 128px; see README)
   const file = folder === 'Star-struck' ? 'star-struck' : folder.toLowerCase().replace(/ /g, '_').replace(/-/g, '_').replace(/[^a-z0-9_]/g, '');
   const urls = [`${BASE}/${encodeURIComponent(folder)}/3D/${file}_3d.png`, `${BASE}/${encodeURIComponent(folder)}/Default/3D/${file}_3d_default.png`];
   let ok = false;

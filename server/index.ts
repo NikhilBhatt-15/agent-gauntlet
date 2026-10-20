@@ -5,6 +5,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { compress } from 'hono/compress';
 import { z } from 'zod';
 import { GameError } from '../shared/game.ts';
 import { LEVELS, publicLevel } from '../shared/levels.ts';
@@ -53,6 +54,9 @@ function clientIp(c: Context): string {
 }
 
 const app = new Hono();
+
+// gzip text responses (JS, CSS, SVG, JSON): keeps a first visit small, which matters on F1's daily bandwidth quota
+app.use('*', compress());
 
 app.use('*', async (c, next) => {
   await next();
@@ -182,6 +186,15 @@ if (fs.existsSync(config.publicDir)) {
     async (c, next) => {
       await next();
       c.header('Cache-Control', 'public, max-age=31536000, immutable');
+    },
+    serveStatic({ root }),
+  );
+  // portraits and icons rarely change: let browsers keep them for a week
+  app.use(
+    '/:dir{avatars|fluent}/*',
+    async (c, next) => {
+      await next();
+      c.header('Cache-Control', 'public, max-age=604800');
     },
     serveStatic({ root }),
   );

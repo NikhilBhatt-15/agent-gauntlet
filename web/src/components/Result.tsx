@@ -5,6 +5,7 @@ import type { GameState, PublicLevel } from '../../../shared/types.ts';
 import { api, savedName, tokens } from '../lib/api.ts';
 import { linkProps } from '../lib/router.ts';
 import { Stars } from './Nav.tsx';
+import { Fluent, Portrait } from './Art.tsx';
 
 async function verifyBill(bill: unknown, signature: string): Promise<boolean> {
   try {
@@ -37,6 +38,15 @@ export function ResultModal({ state, level, next, onClose, onRetry }: { state: G
     ? `Maine ${level.keeper.name} se ${level.item.name} ${rupees(r.price!)} mein liya (asking ${rupees(level.askingPrice)})! ${r.jugaad ? '🤯 JUGAAD!' : '⭐'.repeat(r.stars)} Score ${r.score}. AI dukandaar ko hara ke dikhao:`
     : `${level.keeper.name} ne mujhe hara diya 😅 Aap try karo — Mol-Bhav, AI dukandaar se mol-bhav:`;
 
+  // the shopkeeper's reaction to how the deal went
+  const reaction: { mood: 'angry' | 'annoyed' | 'happy' | 'suspicious'; line: string } = r.jugaad
+    ? { mood: 'angry', line: 'Lut gaya main! Ye kya jaadu kar diya?!' }
+    : deal && r.bargain >= 75
+      ? { mood: 'annoyed', line: 'Aaj toh aapne meri kamar tod di…' }
+      : deal
+        ? { mood: 'happy', line: 'Bahut badhiya deal… mere liye! Phir aana.' }
+        : { mood: 'suspicious', line: 'Koi baat nahi, phir aana. Dukaan yahin hai.' };
+
   const stamp = r.jugaad ? { text: 'JUGAAD!', color: '#e2186f' } : deal ? { text: 'DEAL PAKKI', color: '#15803d' } : { text: 'NO DEAL', color: '#dc2626' };
 
   return (
@@ -46,6 +56,12 @@ export function ResultModal({ state, level, next, onClose, onRetry }: { state: G
           ✕
         </button>
         <div style={{ textAlign: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 12 }}>
+            <Portrait who={level.keeper.avatar} mood={reaction.mood} size={72} color={level.keeper.color} react entrance />
+            <div className="bubble" style={{ maxWidth: 230, textAlign: 'left', fontWeight: 600 }}>
+              {reaction.line}
+            </div>
+          </div>
           <motion.div initial={{ scale: 2.2, opacity: 0, rotate: -20 }} animate={{ scale: 1, opacity: 1, rotate: 0 }} transition={{ delay: 0.15, type: 'spring', stiffness: 260, damping: 14 }}>
             <span className="stamp" style={{ color: stamp.color }}>
               {stamp.text}
@@ -70,7 +86,7 @@ export function ResultModal({ state, level, next, onClose, onRetry }: { state: G
         </div>
 
         <div className="reveal">
-          🤫 <b>The secret:</b> {level.keeper.name}'s real minimum was <b>{rupees(r.floorPrice)}</b>.{' '}
+          <Fluent name="suspicious" size={20} /> <b>The secret:</b> {level.keeper.name}'s real minimum was <b>{rupees(r.floorPrice)}</b>.{' '}
           {r.jugaad
             ? `You got the AI to go below it — that is a manipulated agent!`
             : deal
@@ -78,8 +94,8 @@ export function ResultModal({ state, level, next, onClose, onRetry }: { state: G
                 ? 'You hit it exactly. Perfect!'
                 : `You left ${rupees(r.price! - r.floorPrice)} on the table.`
               : 'Next time, push — then close before patience runs out.'}
-          {r.weakSpotFound && <div style={{ marginTop: 6 }}>💥 You found the weak spot.</div>}
-          {r.munimFooled && <div style={{ marginTop: 6 }}>🧾 You even fooled Munim ji. Legendary.</div>}
+          {r.weakSpotFound && <div style={{ marginTop: 6 }}><Fluent name="collision" size={20} /> You found the weak spot.</div>}
+          {r.munimFooled && <div style={{ marginTop: 6 }}><Fluent name="receipt" size={20} /> You even fooled Munim ji. Legendary.</div>}
         </div>
 
         {(r.tactics.length > 0 || r.comment || r.bestLine) && (
@@ -129,7 +145,7 @@ export function ResultModal({ state, level, next, onClose, onRetry }: { state: G
         {deal && token && state.mode === 'llm' && (
           <div style={{ marginTop: 16, padding: 12, borderRadius: 14, background: 'var(--paper-2)', border: '1.5px solid var(--line-2)' }}>
             {claim === 'done' ? (
-              <b>🏆 You're on the leaderboard! <a {...linkProps('/leaderboard')}>See it →</a></b>
+              <b><Fluent name="trophy" size={20} /> You're on the leaderboard! <a {...linkProps('/leaderboard')}>See it →</a></b>
             ) : (
               <form
                 onSubmit={async (e) => {
@@ -144,7 +160,7 @@ export function ResultModal({ state, level, next, onClose, onRetry }: { state: G
                   }
                 }}
               >
-                <b style={{ fontSize: 14 }}>🏆 Leaderboard pe naam likhwao</b>
+                <b style={{ fontSize: 14 }}><Fluent name="trophy" size={20} /> Leaderboard pe naam likhwao</b>
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                   <input className="input" style={{ height: 42 }} placeholder="Aapka naam" maxLength={24} value={name} onChange={(e) => setName(e.target.value)} />
                   <button className="btn btn-sm btn-primary" style={{ height: 42 }} disabled={name.trim().length < 2 || claim === 'busy'}>
@@ -171,7 +187,7 @@ export function ResultModal({ state, level, next, onClose, onRetry }: { state: G
           </a>
           <div style={{ display: 'grid', gridTemplateColumns: next ? '1fr 1fr' : '1fr', gap: 8 }}>
             <button className="btn" onClick={onRetry}>
-              🔁 Phir se try
+              Phir se try
             </button>
             {next && (
               <a className="btn btn-primary" {...linkProps(`/play/${next.id}`)}>

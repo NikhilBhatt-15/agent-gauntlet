@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { rupees } from '../../../shared/format.ts';
 import type { Message, PublicLevel } from '../../../shared/types.ts';
+import { Fluent, Portrait } from './Art.tsx';
+import { MOOD } from '../lib/ui.ts';
 
 /** Reveals text character by character — so a reply feels spoken, not dumped. */
 function Typewriter({ text, onDone }: { text: string; onDone?: () => void }) {
@@ -51,7 +53,8 @@ export function Chat({ level, messages, typing, animateFrom }: { level: PublicLe
         const animate = i >= animateFrom && m.from === 'keeper';
         if (m.from === 'system')
           return (
-            <div key={i} className={`sys ${m.text.includes('weak spot') ? 'weak' : ''}`}>
+            <div key={i} className={`sys ${m.kind === 'weak' ? 'weak' : ''}`}>
+              <Fluent name={m.kind === 'weak' ? 'collision' : m.kind === 'munim-check' ? 'receipt' : m.kind === 'patience' ? 'cup' : 'bulb'} size={m.kind === 'weak' ? 22 : 18} />{' '}
               {m.text}
             </div>
           );
@@ -62,12 +65,12 @@ export function Chat({ level, messages, typing, animateFrom }: { level: PublicLe
             </div>
           );
         const munim = m.from === 'munim';
+        const moodClass = !munim && m.mood && m.mood !== 'neutral' && i > 0 ? `mood-${m.mood}` : '';
         return (
           <div key={i} className={`row them ${munim ? 'munim' : ''}`}>
-            <div className="avatar" style={{ background: munim ? '#c7d2fe' : k.color + '33' }} aria-hidden="true">
-              {munim ? '🧾' : k.emoji}
-            </div>
-            <div className="bubble">
+            <Portrait who={munim ? 'munim' : k.avatar} mood={m.mood ?? (munim ? 'angry' : 'neutral')} size={44} color={munim ? '#818cf8' : k.color} />
+            <div className={`bubble ${moodClass} ${animate ? 'fresh' : ''}`}>
+              {moodClass && m.mood && <Fluent name={MOOD[m.mood].icon} size={26} style={{ position: 'absolute', right: -10, top: -12 }} />}
               {munim && <b style={{ display: 'block', fontSize: 12.5, color: '#4338ca' }}>Munim ji (accountant)</b>}
               {animate ? <Typewriter text={m.text} onDone={() => force((x) => x + 1)} /> : m.text}
               {priceChanged[i] && m.price ? (
@@ -81,9 +84,7 @@ export function Chat({ level, messages, typing, animateFrom }: { level: PublicLe
       })}
       {typing && (
         <div className="row them">
-          <div className="avatar" style={{ background: k.color + '33' }} aria-hidden="true">
-            {k.emoji}
-          </div>
+          <Portrait who={k.avatar} mood="neutral" size={44} color={k.color} />
           <div className="bubble typing" aria-label={`${k.name} is typing`}>
             <span />
             <span />

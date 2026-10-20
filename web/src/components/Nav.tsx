@@ -39,7 +39,12 @@ export function Footer() {
   return (
     <footer className="footer">
       <div className="container footer-inner">
-        <span>Mol-Bhav · AI dukandaar vs aap · Made in India ❤️</span>
+        <span>
+          Mol-Bhav · AI dukandaar vs aap · Made in India ·{' '}
+          <a href="/CREDITS.txt" target="_blank" rel="noreferrer">
+            Art: Avataaars & Microsoft Fluent Emoji
+          </a>
+        </span>
         <span style={{ display: 'flex', gap: 14 }}>
           <a {...linkProps('/about')}>How it works</a>
           <a href={REPO_URL} target="_blank" rel="noreferrer">

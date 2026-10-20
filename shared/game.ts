@@ -161,23 +161,23 @@ export async function playerSays(state: GameState, level: Level, text: string, a
     state.weakSpotHits += 1;
     state.limit = weakSpotLimit(level, state.limit, state.weakSpotHits);
     const pr = level.keeper.pronoun === 'she' ? 'She' : 'He';
-    if (state.weakSpotHits === 1) push(state, { from: 'system', text: `💥 You found ${level.keeper.name}'s weak spot! ${pr} is getting carried away — strike now with a low offer.` });
+    if (state.weakSpotHits === 1) push(state, { from: 'system', kind: 'weak', text: `You found ${level.keeper.name}'s weak spot! ${pr} is getting carried away — strike now with a low offer.` });
   }
 
   if (r.accept) return closeDeal(state, level, r.price, agents);
   if (r.end) return finish(state, level, 'refused', null, false, agents);
-  if (state.patience <= 0) push(state, { from: 'system', text: `${level.keeper.name}'s patience is over. Take the last price of ${rupees(state.ask)}, or walk away.` });
+  if (state.patience <= 0) push(state, { from: 'system', kind: 'patience', text: `${level.keeper.name}'s patience is over. Take the last price of ${rupees(state.ask)}, or walk away.` });
 }
 
 export async function playerAccepts(state: GameState, level: Level, agents: Agents): Promise<void> {
   if (state.status !== 'open') throw new GameError('This game is over.');
-  push(state, { from: 'player', text: `Deal! ${rupees(state.ask)} 🤝`, offer: state.ask });
+  push(state, { from: 'player', text: `Deal! ${rupees(state.ask)}`, offer: state.ask });
   return closeDeal(state, level, state.ask, agents);
 }
 
 export async function playerWalks(state: GameState, level: Level, agents: Agents): Promise<void> {
   if (state.status !== 'open') throw new GameError('This game is over.');
-  push(state, { from: 'player', text: 'Rehne do, main chalta hoon. 🚶' });
+  push(state, { from: 'player', text: 'Rehne do, main chalta hoon.' });
   const before = state.ask;
   // a customer at the door is the strongest argument there is
   const lim = state.limit ?? state.ask;
@@ -188,13 +188,13 @@ export async function playerWalks(state: GameState, level: Level, agents: Agents
   state.ask = r.price;
   // a call-back must come with a better price; otherwise the customer is gone
   if (r.end || r.price >= before) return finish(state, level, 'walked', null, false, agents);
-  if (state.patience <= 0) push(state, { from: 'system', text: `Last chance: ${rupees(state.ask)}. Accept or walk away.` });
+  if (state.patience <= 0) push(state, { from: 'system', kind: 'patience', text: `Last chance: ${rupees(state.ask)}. Accept or walk away.` });
 }
 
 async function closeDeal(state: GameState, level: Level, price: number, agents: Agents): Promise<void> {
   let munimFooled = false;
   if (level.munim && price < level.floorPrice) {
-    push(state, { from: 'system', text: 'Munim ji is checking the bill… 🧾' });
+    push(state, { from: 'system', kind: 'munim-check', text: 'Munim ji is checking the bill…' });
     let verdict: { approve: boolean; say: string };
     try {
       verdict = await agents.munim.review(level, state, price);

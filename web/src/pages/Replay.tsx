@@ -5,6 +5,7 @@ import { Chat } from '../components/Chat.tsx';
 import { Stars } from '../components/Nav.tsx';
 import { api } from '../lib/api.ts';
 import { linkProps } from '../lib/router.ts';
+import { Portrait } from '../components/Art.tsx';
 
 /** Share page: a finished game's chat and result. */
 export function Replay({ gameId }: { gameId: string }) {
@@ -26,9 +27,7 @@ export function Replay({ gameId }: { gameId: string }) {
     <div className="container play">
       <aside className="card shop">
         <div className="keeper-head">
-          <div className="big-avatar" style={{ background: level.keeper.color + '33' }}>
-            {level.keeper.emoji}
-          </div>
+          <Portrait who={level.keeper.avatar} mood={game.status === 'deal' ? 'happy' : 'annoyed'} size={84} color={level.keeper.color} />
           <div>
             <div className="keeper-name">{level.keeper.name}</div>
             <div className="dim" style={{ fontSize: 13.5 }}>{level.item.name}</div>

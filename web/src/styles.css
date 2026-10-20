@@ -851,3 +851,78 @@ button {
     display: none;
   }
 }
+
+/* ---- emotions in the chat ---- */
+.bubble.mood-angry {
+  background: #fee2e2;
+  border-color: #f87171;
+}
+.bubble.mood-annoyed {
+  background: #fff7e0;
+  border-color: #f6c56b;
+}
+.bubble.mood-happy {
+  background: #ecfdf3;
+  border-color: #86efac;
+}
+.bubble.mood-impressed {
+  background: #f5f0ff;
+  border-color: #c4b5fd;
+}
+.bubble.mood-suspicious {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+.bubble.fresh.mood-angry {
+  animation: jolt 0.45s ease 2;
+}
+.bubble.fresh.mood-happy,
+.bubble.fresh.mood-impressed {
+  animation: pop 0.45s ease;
+}
+@keyframes jolt {
+  20% {
+    transform: translateX(-5px) rotate(-1deg);
+  }
+  60% {
+    transform: translateX(5px) rotate(1deg);
+  }
+}
+@keyframes pop {
+  40% {
+    transform: scale(1.04);
+  }
+}
+.bubble-mood {
+  position: absolute;
+  right: -10px;
+  top: -12px;
+}
+.row.them .bubble {
+  position: relative;
+}
+.flash-red {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 70;
+  box-shadow: inset 0 0 140px 30px rgba(220, 38, 38, 0.45);
+  animation: flash 0.9s ease forwards;
+}
+@keyframes flash {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (min-width: 940px) {
+  .shop .keeper-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

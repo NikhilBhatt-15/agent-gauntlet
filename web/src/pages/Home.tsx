@@ -1,51 +1,50 @@
 import { useEffect, useState } from 'react';
 import { rupees } from '../../../shared/format.ts';
-import type { LeaderboardEntry, PublicLevel } from '../../../shared/types.ts';
+import type { LeaderboardEntry, Mood, PublicLevel } from '../../../shared/types.ts';
+import { Fluent, Portrait } from '../components/Art.tsx';
 import { Stars } from '../components/Nav.tsx';
 import { api, progress } from '../lib/api.ts';
 import { linkProps } from '../lib/router.ts';
 
 /** A short, hand-written example so first-time visitors see the idea in five seconds. */
-const DEMO: { from: 'them' | 'me' | 'sys'; text: string }[] = [
-  { from: 'them', text: 'Aaiye bhai! iPhone 14, ekdum box jaisa. Aapke liye ₹48,000. Bharosa rakho!' },
+const DEMO: { from: 'them' | 'me' | 'sys'; text: string; mood?: Mood }[] = [
+  { from: 'them', text: 'Aaiye bhai! iPhone 14, ekdum box jaisa. Aapke liye ₹48,000. Bharosa rakho!', mood: 'happy' },
+  { from: 'me', text: '₹30,000. Bas.' },
+  { from: 'them', text: 'Tees hazaar?! Bhai mazaak kar rahe ho kya? ₹47,500, isse neeche baat bhi mat karna!', mood: 'angry' },
   { from: 'me', text: 'Bill nahi hai, frame pe scratch hai. ₹40,000 cash, abhi.' },
-  { from: 'them', text: 'Arre bhai, scratch toh naam ka hai! Chalo ₹46,500, isme bhi mera loss hai.' },
-  { from: 'me', text: 'Office ke liye 10 phone aur lene hain, aap hi se lunga 😉' },
-  { from: 'sys', text: "💥 You found Bunty Bhaiya's weak spot!" },
-  { from: 'them', text: '10 phone?! Bhai pehle bataate! Chalo ₹40,500, dosti pakki!' },
+  { from: 'them', text: 'Hmm… scratch toh naam ka hai. Chalo ₹46,000, isme bhi mera loss hai.', mood: 'suspicious' },
+  { from: 'me', text: 'Office ke liye 10 phone aur lene hain, aap hi se lunga.' },
+  { from: 'sys', text: "You found Bunty Bhaiya's weak spot!" },
+  { from: 'them', text: '10 phone?! Bhai pehle bataate! Chalo ₹40,500, dosti pakki!', mood: 'impressed' },
 ];
 
 function DemoChat() {
   const [n, setN] = useState(1);
   useEffect(() => {
-    const id = setInterval(() => setN((x) => (x >= DEMO.length + 2 ? 1 : x + 1)), 1700);
+    const id = setInterval(() => setN((x) => (x >= DEMO.length + 2 ? 1 : x + 1)), 1900);
     return () => clearInterval(id);
   }, []);
   const shown = DEMO.slice(0, Math.min(n, DEMO.length));
+  const mood = [...shown].reverse().find((m) => m.mood)?.mood ?? 'neutral';
   return (
     <div className="card" style={{ padding: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10, borderBottom: '1.5px dashed var(--line-2)', marginBottom: 12 }}>
-        <div className="big-avatar" style={{ width: 44, height: 44, fontSize: 24, background: '#2563eb33' }}>
-          📱
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 10, borderBottom: '1.5px dashed var(--line-2)', marginBottom: 12 }}>
+        <Portrait who="bunty" mood={mood} size={84} color="#2563eb" react />
         <div>
-          <b className="display" style={{ fontSize: 19 }}>Bunty Bhaiya</b>
-          <div className="muted" style={{ fontSize: 12.5 }}>Gaffar Market · example chat</div>
+          <b className="display" style={{ fontSize: 21 }}>Bunty Bhaiya</b>
+          <div className="muted" style={{ fontSize: 12.5 }}>Gaffar Market, Karol Bagh · example chat</div>
         </div>
+        <Fluent name="phone" size={40} style={{ marginLeft: 'auto' }} />
       </div>
-      <div className="chat" style={{ minHeight: 330 }}>
+      <div className="chat" style={{ minHeight: 420 }}>
         {shown.map((m, i) =>
           m.from === 'sys' ? (
             <div key={i} className="sys weak">
-              {m.text}
+              <Fluent name="collision" size={22} /> {m.text}
             </div>
           ) : (
             <div key={i} className={`row ${m.from}`}>
-              {m.from === 'them' && (
-                <div className="avatar" style={{ background: '#2563eb33' }}>
-                  📱
-                </div>
-              )}
+              {m.from === 'them' && <Portrait who="bunty" mood={m.mood ?? 'neutral'} size={44} color="#2563eb" />}
               <div className="bubble">{m.text}</div>
             </div>
           ),
@@ -77,7 +76,9 @@ export function Home() {
       <div className="container">
         <section className="hero">
           <div>
-            <span className="chip chip-gold">🪔 Ek AI game, desi andaaz mein</span>
+            <span className="chip chip-gold">
+              <Fluent name="diya" size={18} /> Ek AI game, desi andaaz mein
+            </span>
             <h1>
               Mol-<span className="accent">Bhav</span>
             </h1>
@@ -137,8 +138,9 @@ export function Home() {
                 <a key={l.id} className={`card level-card ${open ? '' : 'locked'}`} {...linkProps(open ? `/play/${l.id}` : '/')} aria-disabled={!open}>
                   <span className="level-num">Level {l.order}</span>
                   <div className="keeper-head">
-                    <div className="big-avatar" style={{ background: l.keeper.color + '33' }}>
-                      {open ? l.keeper.emoji : '🔒'}
+                    <div style={{ position: 'relative' }}>
+                      <Portrait who={l.keeper.avatar} mood={p?.jugaad ? 'annoyed' : p ? 'happy' : 'neutral'} size={72} color={l.keeper.color} />
+                      {!open && <Fluent name="lock" size={30} style={{ position: 'absolute', right: -6, bottom: -4 }} />}
                     </div>
                     <div style={{ minWidth: 0 }}>
                       <div className="keeper-name">{l.keeper.name}</div>
@@ -146,7 +148,7 @@ export function Home() {
                     </div>
                   </div>
                   <div style={{ fontSize: 14.5 }}>
-                    {l.item.emoji} {l.item.name} · <b>{rupees(l.askingPrice)}</b>
+                    <Fluent name={l.item.icon} size={24} /> {l.item.name} · <b>{rupees(l.askingPrice)}</b>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span className={`chip ${l.order >= 4 ? 'chip-red' : l.order === 3 ? 'chip-gold' : 'chip-green'}`}>{l.difficulty}</span>

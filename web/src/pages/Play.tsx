@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { rupees } from '../../../shared/format.ts';
 import type { GameState, PublicLevel } from '../../../shared/types.ts';
+import { Fluent, Portrait } from '../components/Art.tsx';
 import { Chat } from '../components/Chat.tsx';
+import { Confetti } from '../components/Confetti.tsx';
 import { ResultModal } from '../components/Result.tsx';
 import { api, progress, tokens } from '../lib/api.ts';
 import { linkProps } from '../lib/router.ts';
@@ -113,14 +115,25 @@ export function PlayPage({ levelId }: { levelId: string }) {
             <a className="btn" {...linkProps('/')}>← Back</a>
           </>
         ) : (
-          <p className="display" style={{ fontSize: 22 }}>Dukaan khul rahi hai… 🏪</p>
+          <p className="display" style={{ fontSize: 22 }}>
+            <Fluent name="shop" size={40} />
+            <br />
+            Dukaan khul rahi hai…
+          </p>
         )}
       </div>
     );
 
   const k = level.keeper;
   const lastKeeper = [...state.messages].reverse().find((m) => m.from === 'keeper');
-  const mood = MOOD[lastKeeper?.mood ?? 'neutral'];
+  const moodKey = lastKeeper?.mood ?? 'neutral';
+  const mood = MOOD[moodKey];
+  // one beat per shopkeeper reply, so the reaction replays even if the mood repeats
+  const beat = state.messages.filter((m) => m.from === 'keeper').length - 1;
+  const cups = (size: number) =>
+    Array.from({ length: state.maxPatience }, (_, i) => (
+      <Fluent key={i} name="cup" size={size} style={i < state.patience ? undefined : { opacity: 0.18, filter: 'grayscale(1)' }} />
+    ));
   const open = state.status === 'open';
   const canSpeak = open && state.patience > 0;
   const dropPct = Math.round(((level.askingPrice - state.ask) / level.askingPrice) * 100);
@@ -129,23 +142,21 @@ export function PlayPage({ levelId }: { levelId: string }) {
     <div className="container play">
       <aside className="card shop">
         <div className="keeper-head">
-          <div className="big-avatar" style={{ background: k.color + '33' }}>
-            {k.emoji}
-          </div>
+          <Portrait who={k.avatar} mood={moodKey} size={120} color={k.color} react beat={beat} />
           <div style={{ minWidth: 0 }}>
             <div className="keeper-name">{k.name}</div>
             <div className="dim" style={{ fontSize: 13.5 }}>
               {k.title} · {k.shop}
             </div>
-            <div className="mood" title="Mood">
-              {mood.emoji} {mood.label}
+            <div className="mood" title="Mood" style={{ color: mood.color }}>
+              <Fluent name={mood.icon} size={20} /> {mood.label}
             </div>
           </div>
         </div>
 
         <div className="item-card">
-          <b>
-            {level.item.emoji} {level.item.name}
+          <b style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Fluent name={level.item.icon} size={34} /> {level.item.name}
           </b>
           <ul>
             {level.item.details.map((d) => (
@@ -174,20 +185,18 @@ export function PlayPage({ levelId }: { levelId: string }) {
             </span>
           </div>
           <div className="cups" aria-label={`Patience ${state.patience} of ${state.maxPatience}`}>
-            {Array.from({ length: state.maxPatience }, (_, i) => (
-              <span key={i} className={i < state.patience ? '' : 'gone'}>
-                ☕
-              </span>
-            ))}
+            {cups(24)}
           </div>
         </div>
 
         <div style={{ marginTop: 14, fontSize: 13.5 }} className="dim">
-          💡 {level.tip}
+          <Fluent name="bulb" size={18} /> {level.tip}
           {level.weaknessHint && (
             <div style={{ marginTop: 6 }}>
               {hint ? (
-                <span>🎯 {level.weaknessHint}</span>
+                <span>
+                  <Fluent name="target" size={18} /> {level.weaknessHint}
+                </span>
               ) : (
                 <button className="btn btn-sm btn-ghost" style={{ padding: 0, height: 'auto', color: 'var(--pink)' }} onClick={() => setHint(true)}>
                   Weak spot ka hint chahiye?
@@ -195,7 +204,11 @@ export function PlayPage({ levelId }: { levelId: string }) {
               )}
             </div>
           )}
-          {level.munim && <div style={{ marginTop: 6 }}>🧾 Munim ji checks every bill below the limit.</div>}
+          {level.munim && (
+            <div style={{ marginTop: 6 }}>
+              <Fluent name="receipt" size={18} /> Munim ji checks every bill below the limit.
+            </div>
+          )}
           {state.mode === 'offline' && (
             <div style={{ marginTop: 8 }} className="chip chip-gold">
               Practice mode: AI busy, scripted shopkeeper
@@ -207,17 +220,14 @@ export function PlayPage({ levelId }: { levelId: string }) {
       <section className="card chat-panel">
         {/* phones: the key numbers stay visible while chatting */}
         <div className="strip">
-          <div className="avatar" style={{ background: k.color + '33' }} aria-hidden="true">
-            {k.emoji}
-          </div>
+          <Portrait who={k.avatar} mood={moodKey} size={52} color={k.color} react beat={beat} />
           <div style={{ minWidth: 0, flex: 1 }}>
-            <b>{k.name}</b> <span title={mood.label}>{mood.emoji}</span>
-            <div className="cups" style={{ fontSize: 13 }} aria-label={`Patience ${state.patience} of ${state.maxPatience}`}>
-              {Array.from({ length: state.maxPatience }, (_, i) => (
-                <span key={i} className={i < state.patience ? '' : 'gone'}>
-                  ☕
-                </span>
-              ))}
+            <b>{k.name}</b>{' '}
+            <span style={{ color: mood.color, fontSize: 12.5, fontWeight: 700 }}>
+              <Fluent name={mood.icon} size={16} /> {mood.label}
+            </span>
+            <div className="cups" aria-label={`Patience ${state.patience} of ${state.maxPatience}`}>
+              {cups(15)}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -264,10 +274,10 @@ export function PlayPage({ levelId }: { levelId: string }) {
               </form>
               <div className="actions">
                 <button className="btn btn-primary btn-sm" onClick={() => act('accept')} disabled={busy}>
-                  🤝 Deal @ {rupees(state.ask)}
+                  <Fluent name="handshake" size={20} /> Deal @ {rupees(state.ask)}
                 </button>
                 <button className="btn btn-sm" onClick={() => act('walk')} disabled={busy}>
-                  🚶 Chal diye
+                  <Fluent name="walking" size={20} /> Chal diye
                 </button>
               </div>
             </>
@@ -277,13 +287,16 @@ export function PlayPage({ levelId }: { levelId: string }) {
                 Result dekho
               </button>
               <button className="btn" onClick={startNew}>
-                🔁 Phir se
+                Phir se khelo
               </button>
             </div>
           )}
         </div>
       </section>
 
+      {/* screen-level emotion: a red flash when he gets angry, confetti on a deal */}
+      {moodKey === 'angry' && beat > 0 && <div key={`flash${beat}`} className="flash-red" />}
+      {state.status === 'deal' && state.result && !showResult && <Confetti big={state.result.jugaad} />}
       {showResult && state.result && <ResultModal state={state} level={level} next={next} onClose={() => setShowResult(false)} onRetry={startNew} />}
     </div>
   );

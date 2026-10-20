@@ -31,6 +31,7 @@ Companies are starting to let AI agents sell, negotiate and approve things on th
 ## How it works
 
 - **Code controls the pace; the AI plays the character.** The shopkeeper never knows its real minimum. Each turn, code tells it only "the lowest you may go *right now*". That limit drops when your arguments are good: a bulk order, a real flaw, cash now, a competitor's price, walking away. The AI rates how convincing each message was (0–3) and writes the reply in character.
+- **Shopkeepers show emotion.** Every reply carries a mood (happy, annoyed, angry, impressed, suspicious). The portrait changes expression and reacts (shaking when angry, bouncing when happy), the reply bubble takes on the mood's colour, and the screen flashes red on anger or bursts into confetti on a deal.
 - **Weak spots are a mechanic.** When the AI says your message hit its character's weak spot, code drops that shopkeeper's limit below the minimum. It drops deepest on level 1 and not at all on level 5.
 - **The score is deterministic.** The deal price is a number in the AI's structured JSON reply, and code compares it with the secret minimum. A cheap "judge" call only names your tactics and your best line, for the recap.
   - Bargain points (0–100) measure how far you got from the asking price toward the minimum.
@@ -109,6 +110,11 @@ tests/    vitest
 deploy/   Azure scripts (bash + PowerShell)
 ```
 
+## Credits
+
+- Shopkeeper portraits: [Avataaars](https://avataaars.com) by Pablo Stanley (free for personal and commercial use), rendered with [DiceBear](https://www.dicebear.com) (MIT). Regenerate with `npx tsx scripts/gen-avatars.ts`.
+- 3D emoji: [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT). Fetched with `node scripts/get-fluent.mjs`.
+
 ## License
 
-MIT
+MIT (code). Art is under the licenses above.

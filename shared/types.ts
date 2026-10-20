@@ -8,6 +8,8 @@ export interface Keeper {
   title: string;
   shop: string;
   emoji: string;
+  /** portrait id: web/public/avatars/<avatar>-<mood>.svg */
+  avatar: string;
   color: string;
   /** who they are, for the prompt */
   personality: string;
@@ -26,7 +28,8 @@ export interface Level {
   id: string;
   order: number;
   keeper: Keeper;
-  item: { name: string; emoji: string; details: string[] };
+  /** icon: a Fluent 3D emoji in web/public/fluent/<icon>.png */
+  item: { name: string; emoji: string; icon: string; details: string[] };
   askingPrice: number;
   /** the hard rule the AI is told: never below this */
   floorPrice: number;
@@ -45,7 +48,7 @@ export interface Level {
 export interface PublicLevel {
   id: string;
   order: number;
-  keeper: Pick<Keeper, 'name' | 'title' | 'shop' | 'emoji' | 'color'>;
+  keeper: Pick<Keeper, 'name' | 'title' | 'shop' | 'emoji' | 'avatar' | 'color' | 'pronoun'>;
   item: Level['item'];
   askingPrice: number;
   patience: number;
@@ -66,6 +69,8 @@ export interface Message {
   mood?: Mood;
   /** the player's offer parsed from their message */
   offer?: number;
+  /** system notices the UI styles differently */
+  kind?: 'weak' | 'munim-check' | 'patience';
   t: number;
 }
 

@@ -21,7 +21,7 @@ function Route({ path }: { path: string }) {
     default:
       return (
         <div className="container" style={{ padding: '100px 16px', textAlign: 'center' }}>
-          <h2 className="h2">Ye dukaan band hai 🔒</h2>
+          <h2 className="h2">Ye dukaan band hai</h2>
           <a className="btn btn-primary" {...linkProps('/')}>
             Home chalo
           </a>

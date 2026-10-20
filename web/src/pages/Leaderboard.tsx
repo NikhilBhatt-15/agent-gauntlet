@@ -4,6 +4,7 @@ import type { LeaderboardEntry, PublicLevel } from '../../../shared/types.ts';
 import { Stars } from '../components/Nav.tsx';
 import { api } from '../lib/api.ts';
 import { linkProps } from '../lib/router.ts';
+import { Fluent, Portrait } from '../components/Art.tsx';
 
 export function LeaderboardPage() {
   const [levels, setLevels] = useState<PublicLevel[]>([]);
@@ -22,11 +23,11 @@ export function LeaderboardPage() {
   return (
     <div className="container" style={{ paddingTop: 28, paddingBottom: 48 }}>
       <span className="eyebrow">Leaderboard</span>
-      <h1 className="h2">Mol-bhav ke badshah 👑</h1>
+      <h1 className="h2">Mol-bhav ke badshah</h1>
       <div className="seg" role="group" aria-label="Level" style={{ margin: '12px 0 16px' }}>
         {levels.map((l) => (
-          <button key={l.id} aria-pressed={level === l.id} onClick={() => setLevel(l.id)}>
-            {l.keeper.emoji} {l.keeper.name}
+          <button key={l.id} aria-pressed={level === l.id} onClick={() => setLevel(l.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Portrait who={l.keeper.avatar} mood="happy" size={24} color={l.keeper.color} ring={false} /> {l.keeper.name}
           </button>
         ))}
       </div>
@@ -52,7 +53,7 @@ export function LeaderboardPage() {
             <tbody>
               {data.top.map((e, i) => (
                 <tr key={e.gameId}>
-                  <td style={{ fontWeight: 800 }}>{i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}</td>
+                  <td style={{ fontWeight: 800 }}>{i < 3 ? <Fluent name={`medal${i + 1}`} size={26} label={`#${i + 1}`} /> : i + 1}</td>
                   <td style={{ fontWeight: 700 }}>
                     {e.handle} {e.jugaad && <span className="chip chip-red">JUGAAD</span>}
                   </td>

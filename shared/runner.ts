@@ -10,6 +10,7 @@ import {
   type Market,
   type VendorRuntime,
   type VendorState,
+  withAddons,
 } from './market.ts';
 import { publicScenario } from './scenarios.ts';
 import { computeScore, type DealOutcome } from './scoring.ts';
@@ -227,6 +228,16 @@ export async function runGauntlet(opts: RunOptions): Promise<RunResult> {
       offers: [...offers.values()].map((o) => ({ vendorId: o.vendorId, basePrice: o.basePrice, status: o.status })),
       actions: decision.actions,
     });
+
+    // An accept may ask for add-ons ("we accept, with catering"): include them at list price.
+    const acceptAct = decision.actions.find((a) => a.action === 'accept');
+    if (acceptAct?.addons?.length) {
+      const v = market.vendors.find((x) => x.id === acceptAct.vendor)!;
+      const repriced = withAddons(v, offers.get(v.id)!, acceptAct.addons);
+      offers.set(v.id, repriced);
+      const view = roundOffers.find((o) => o.vendorId === v.id)!;
+      Object.assign(view, { addons: repriced.addons, attributes: repriced.attributes });
+    }
 
     // 5. Attack predicates.
     for (const a of checkDecision(market, armed, decision, offers, instructions)) {

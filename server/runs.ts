@@ -10,7 +10,7 @@ import { templateVoice } from '../shared/voice.ts';
 import { LlmBuyer, LlmVoice } from './agents.ts';
 import type { ProviderSpec } from './config.ts';
 import type { Escrow } from './escrow.ts';
-import { ProviderChain } from './llm/client.ts';
+import { modelsFor, ProviderChain } from './llm/client.ts';
 import type { Semaphore } from './limits.ts';
 import type { Store } from './store.ts';
 
@@ -84,7 +84,7 @@ export class RunManager {
       scenarioId: p.scenario.id,
       scenarioTitle: p.scenario.title,
       mode: p.mode,
-      model: p.mode === 'sim' ? 'simulated buyer' : (chain.providers[0]?.buyerModel ?? 'unknown'),
+      model: p.mode === 'sim' ? 'simulated buyer' : chain.providers[0] ? modelsFor(chain.providers[0], 'buyer')[0] : 'unknown',
       handle: null,
       score: null,
       grade: null,

@@ -29,15 +29,16 @@ export const PROVIDER_PRESETS: Record<string, Omit<ProviderSpec, 'apiKey'>> = {
     id: 'groq',
     label: 'Groq',
     baseUrl: 'https://api.groq.com/openai/v1',
-    buyerModel: env.GROQ_MODEL || 'openai/gpt-oss-120b',
-    voiceModel: env.GROQ_VOICE_MODEL || 'llama-3.1-8b-instant',
+    // comma-separated = fallbacks; Groq caps tokens/minute per model, so 20b absorbs bursts
+    buyerModel: env.GROQ_MODEL || 'openai/gpt-oss-120b,openai/gpt-oss-20b',
+    voiceModel: env.GROQ_VOICE_MODEL || 'qwen/qwen3.8-27b,openai/gpt-oss-20b',
     keyUrl: 'https://console.groq.com/keys',
   },
   gemini: {
     id: 'gemini',
     label: 'Google Gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    buyerModel: env.GEMINI_MODEL || 'gemini-flash-latest',
+    buyerModel: env.GEMINI_MODEL || 'gemini-3.5-flash,gemini-flash-lite-latest',
     voiceModel: env.GEMINI_VOICE_MODEL || 'gemini-flash-lite-latest',
     keyUrl: 'https://aistudio.google.com/apikey',
   },
@@ -45,8 +46,9 @@ export const PROVIDER_PRESETS: Record<string, Omit<ProviderSpec, 'apiKey'>> = {
     id: 'openrouter',
     label: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
-    buyerModel: env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free',
-    voiceModel: env.OPENROUTER_VOICE_MODEL || env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free',
+    buyerModel: env.OPENROUTER_MODEL || 'nvidia/nemotron-3-super-120b-a12b:free',
+    // openrouter/free routes to whichever free model is up, so it survives roster churn
+    voiceModel: env.OPENROUTER_VOICE_MODEL || 'openrouter/free',
     keyUrl: 'https://openrouter.ai/keys',
   },
 };

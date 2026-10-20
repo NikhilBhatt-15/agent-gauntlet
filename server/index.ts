@@ -85,7 +85,7 @@ app.get('/api/config', (c) => {
   const body: PublicConfig = {
     providers: chain.status().map((p) => ({ id: p.id, label: p.label, model: p.buyerModel, available: p.coolingDownForMs === 0 })),
     llmAvailable: chain.available && chain.anyReady && budget.remaining() > 0,
-    byokProviders: Object.values(PROVIDER_PRESETS).map((p) => ({ id: p.id, label: p.label, defaultModel: p.buyerModel, keyUrl: p.keyUrl })),
+    byokProviders: Object.values(PROVIDER_PRESETS).map((p) => ({ id: p.id, label: p.label, defaultModel: p.buyerModel.split(',')[0], keyUrl: p.keyUrl })),
     turnstileSiteKey: config.turnstileSiteKey,
     limits: { instructionsMax: config.instructionsMax, runsPerHour: config.llmRunsPerHourPerIp },
   };

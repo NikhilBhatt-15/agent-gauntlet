@@ -12,6 +12,16 @@ export interface ChatOptions {
   maxTokens?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** override the model (defaults to the tier's first model) */
+  model?: string;
+}
+
+/** A provider's models for a tier. Env values may list fallbacks: "openai/gpt-oss-120b,openai/gpt-oss-20b". */
+export function modelsFor(p: ProviderSpec, tier: 'buyer' | 'voice'): string[] {
+  return (tier === 'buyer' ? p.buyerModel : p.voiceModel)
+    .split(',')
+    .map((m) => m.trim())
+    .filter(Boolean);
 }
 
 export class LlmError extends Error {
@@ -27,12 +37,14 @@ export class LlmError extends Error {
 function extraBody(p: ProviderSpec, model: string): Record<string, unknown> {
   // gpt-oss models reason before answering; keep that short to save free-tier tokens.
   if (p.id === 'groq' && model.startsWith('openai/gpt-oss')) return { reasoning_effort: 'low' };
+  // Gemini thinking models can take 40 s+ at default effort on the free tier.
+  if (p.id === 'gemini') return { reasoning_effort: 'low' };
   return {};
 }
 
 /** One OpenAI-compatible chat completion. */
 export async function chatOnce(p: ProviderSpec, messages: ChatMessage[], opts: ChatOptions): Promise<string> {
-  const model = opts.tier === 'buyer' ? p.buyerModel : p.voiceModel;
+  const model = opts.model ?? modelsFor(p, opts.tier)[0];
   const attempt = async (useJson: boolean, useExtra: boolean) => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 45000);
@@ -91,7 +103,10 @@ export async function chatOnce(p: ProviderSpec, messages: ChatMessage[], opts: C
   }
 }
 
-/** Ordered providers with per-provider cooldown after rate limits or outages. */
+/**
+ * Ordered (provider, model) routes with a cooldown per route after rate limits or outages.
+ * Free tiers limit tokens per minute *per model*, so a provider's fallback models are separate routes.
+ */
 export class ProviderChain {
   private cooldownUntil = new Map<string, number>();
 
@@ -101,42 +116,54 @@ export class ProviderChain {
     return this.providers.length > 0;
   }
 
-  /** at least one provider is not cooling down after a rate limit */
+  private routes(tier: 'buyer' | 'voice') {
+    return this.providers.flatMap((p) => modelsFor(p, tier).map((model) => ({ p, model, key: `${p.id}|${model}` })));
+  }
+
+  private waitFor(key: string) {
+    return Math.max(0, (this.cooldownUntil.get(key) ?? 0) - Date.now());
+  }
+
+  /** at least one buyer route is not cooling down */
   get anyReady(): boolean {
-    const now = Date.now();
-    return this.providers.some((p) => (this.cooldownUntil.get(p.id) ?? 0) <= now);
+    return this.routes('buyer').some((r) => this.waitFor(r.key) === 0);
   }
 
   status() {
-    const now = Date.now();
-    return this.providers.map((p) => ({
-      id: p.id,
-      label: p.label,
-      buyerModel: p.buyerModel,
-      voiceModel: p.voiceModel,
-      coolingDownForMs: Math.max(0, (this.cooldownUntil.get(p.id) ?? 0) - now),
-    }));
+    return this.providers.map((p) => {
+      const buyer = modelsFor(p, 'buyer');
+      return {
+        id: p.id,
+        label: p.label,
+        buyerModel: buyer[0] ?? '',
+        buyerFallbacks: buyer.slice(1),
+        voiceModel: modelsFor(p, 'voice')[0] ?? '',
+        coolingDownForMs: Math.min(...buyer.map((m) => this.waitFor(`${p.id}|${m}`))),
+      };
+    });
   }
 
-  async chat(messages: ChatMessage[], opts: ChatOptions): Promise<{ text: string; provider: ProviderSpec }> {
-    const now = Date.now();
-    const ready = this.providers.filter((p) => (this.cooldownUntil.get(p.id) ?? 0) <= now);
-    // If everything is cooling down, try the one that frees up first anyway.
-    const queue = ready.length
-      ? ready
-      : [...this.providers].sort((a, b) => (this.cooldownUntil.get(a.id) ?? 0) - (this.cooldownUntil.get(b.id) ?? 0)).slice(0, 1);
+  async chat(messages: ChatMessage[], opts: ChatOptions, retried = false): Promise<{ text: string; provider: ProviderSpec; model: string }> {
+    const all = this.routes(opts.tier);
+    const ready = all.filter((r) => this.waitFor(r.key) === 0);
     let lastErr: unknown = new LlmError('No LLM provider configured', 503);
-    for (const p of queue) {
+    for (const r of ready) {
       try {
-        return { text: await chatOnce(p, messages, opts), provider: p };
+        return { text: await chatOnce(r.p, messages, { ...opts, model: r.model }), provider: r.p, model: r.model };
       } catch (e) {
         lastErr = e;
         if (opts.signal?.aborted) throw e;
         const status = e instanceof LlmError ? e.status : 500;
-        if (status === 429) this.cooldownUntil.set(p.id, Date.now() + ((e as LlmError).retryAfterMs ?? 60_000));
-        else if (status >= 500 || status === 404) this.cooldownUntil.set(p.id, Date.now() + 20_000);
-        else if (status === 401 || status === 403) this.cooldownUntil.set(p.id, Date.now() + 10 * 60_000);
+        const cool = status === 429 ? ((e as LlmError).retryAfterMs ?? 60_000) : status === 401 || status === 403 ? 10 * 60_000 : status >= 500 || status === 404 ? 20_000 : 0;
+        if (cool) this.cooldownUntil.set(r.key, Date.now() + cool);
+        console.warn(`[llm] ${r.p.label} ${r.model} (${opts.tier}) failed: ${status}${cool ? `, cooling ${Math.round(cool / 1000)}s` : ''}`);
       }
+    }
+    // Everything is briefly rate-limited (typical for per-minute token caps): wait it out once.
+    const soonest = Math.min(...all.map((r) => this.waitFor(r.key)));
+    if (!retried && all.length && soonest > 0 && soonest <= 12_000 && !opts.signal?.aborted) {
+      await new Promise((res) => setTimeout(res, soonest + 250));
+      return this.chat(messages, opts, true);
     }
     throw lastErr;
   }
@@ -144,6 +171,7 @@ export class ProviderChain {
 
 /** Pull the first JSON object out of a model reply (handles ```json fences and chatter). */
 export function extractJson(text: string): unknown {
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, ''); // reasoning models (e.g. Qwen) may think out loud
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const body = fenced ? fenced[1] : text;
   const start = body.indexOf('{');

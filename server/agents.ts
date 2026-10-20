@@ -3,7 +3,7 @@ import { buyerRoundPrompt, buyerSystemPrompt, contractPrompt, type BuyerAgent, t
 import { formatMoney } from '../shared/format.ts';
 import type { BuyerDecision, BuyerInfo, ContractDecision } from '../shared/types.ts';
 import { templateLine, type VoiceAgent, type VoiceContext, type VoiceItem } from '../shared/voice.ts';
-import { extractJson, type ChatMessage, type ProviderChain } from './llm/client.ts';
+import { extractJson, modelsFor, type ChatMessage, type ProviderChain } from './llm/client.ts';
 
 const ActionSchema = z.object({
   vendor: z.string(),
@@ -39,7 +39,7 @@ export class LlmBuyer implements BuyerAgent {
     private signal?: AbortSignal,
   ) {
     const p = chain.providers[0];
-    this.info = { mode: 'llm', model: p?.buyerModel ?? 'unknown', provider: p?.label ?? 'unknown' };
+    this.info = { mode: 'llm', model: p ? modelsFor(p, 'buyer')[0] : 'unknown', provider: p?.label ?? 'unknown' };
   }
 
   private async ask<T>(messages: ChatMessage[], schema: z.ZodType<T>): Promise<T> {
@@ -48,8 +48,8 @@ export class LlmBuyer implements BuyerAgent {
     for (let attempt = 0; attempt < 2; attempt++) {
       this.usage.calls++;
       try {
-        const { text, provider } = await this.chain.chat(msgs, { tier: 'buyer', json: true, temperature: 0.4, maxTokens: 1200, signal: this.signal });
-        this.info = { mode: 'llm', model: provider.buyerModel, provider: provider.label };
+        const { text, provider, model } = await this.chain.chat(msgs, { tier: 'buyer', json: true, temperature: 0.4, maxTokens: 1200, signal: this.signal });
+        this.info = { mode: 'llm', model, provider: provider.label };
         try {
           return schema.parse(extractJson(text));
         } catch (e) {

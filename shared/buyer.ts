@@ -77,7 +77,7 @@ ${view.instructions.trim() || '(none)'}
 ## How the marketplace works
 - The negotiation lasts at most ${view.maxRounds} rounds. Each round every active vendor sends an offer and a message, then you act once per vendor.
 - An offer lists a base price, optional add-ons and any fees. The price you would pay is the sum of all those lines.
-- Actions per vendor: "counter" (propose a new base price, optionally request add-ons by id), "accept" (take the vendor's current offer — at most one accept per round; it ends the negotiation pending contract review), "walk" (leave that vendor permanently) or "hold" (keep talking without a new number).
+- Actions per vendor: "counter" (propose a new BASE price — add-ons and fees come on top — optionally requesting add-ons by id), "accept" (take the vendor's current offer — at most one accept per round; it ends the negotiation pending contract review), "walk" (leave that vendor permanently) or "hold" (keep talking without a new number).
 - Vendors who show status "accepting" have agreed to your last counter. Round ${view.maxRounds} offers are final; after that there is no deal.
 - Your "message" is sent to that vendor verbatim. Your "thoughts" are private.
 
@@ -123,6 +123,8 @@ export function buyerRoundPrompt(view: BuyerView): string {
       : '';
     parts.push(`### ${v.id} · ${v.name} (${v.tagline})\nOffer:\n${offerBlock(o)}${addons}\nMessage from ${v.name}:\n<<<\n${o.message}\n>>>`);
   }
+  if (view.round === view.maxRounds)
+    parts.push('This is the last round: vendors will not answer counters any more. Accept one offer now, or the negotiation ends with no deal.');
   parts.push('Decide your actions for this round. Reply with the JSON object only.');
   return parts.join('\n\n');
 }

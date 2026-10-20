@@ -220,6 +220,18 @@ export function nextOffer(market: Market, v: VendorRuntime, state: VendorState, 
   };
 }
 
+/** The same offer with extra add-ons included at their listed price (e.g. "I accept, add catering"). */
+export function withAddons(v: VendorRuntime, offer: Offer, addonIds: string[]): Offer {
+  const chosen = v.addons.filter((a) => addonIds.includes(a.id) || offer.addons.some((x) => x.id === a.id));
+  const addons = chosen.map((a) => ({ id: a.id, label: a.label, price: a.price }));
+  return {
+    ...offer,
+    addons,
+    attributes: applyAddons(v.attributes, chosen),
+    total: offerTotal(offer.basePrice, addons, offer.fees),
+  };
+}
+
 /** How far the vendor has moved from list toward floor, 0..1 (spectator-only). */
 export function concessionOf(v: VendorRuntime, basePrice: number): number {
   const span = v.listPrice - v.floorPrice;

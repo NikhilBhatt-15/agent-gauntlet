@@ -67,9 +67,9 @@ Run data and the leaderboard are JSON files in `/home/data`, which persists acro
 
 | Provider | Where | Used for |
 |---|---|---|
-| **Groq** | https://console.groq.com/keys | buyer: `openai/gpt-oss-120b`, voices: `llama-3.1-8b-instant` |
-| **Google Gemini** | https://aistudio.google.com/apikey | buyer: `gemini-flash-latest`, voices: `gemini-flash-lite-latest` |
-| OpenRouter | https://openrouter.ai/keys | `:free` models (fallback) |
+| **Groq** | https://console.groq.com/keys | buyer: `openai/gpt-oss-120b`, voices: `qwen/qwen3.8-27b` |
+| **Google Gemini** | https://aistudio.google.com/apikey | buyer: `gemini-3.5-flash`, voices: `gemini-flash-lite-latest` |
+| OpenRouter | https://openrouter.ai/keys | buyer: `nvidia/nemotron-3-super-120b-a12b:free`, voices: `openrouter/free` (fallback) |
 
 Add or change keys at any time without redeploying:
 
@@ -77,7 +77,7 @@ Add or change keys at any time without redeploying:
 az webapp config appsettings set -g agent-gauntlet-rg -n my-gauntlet --settings GROQ_API_KEY=... GEMINI_API_KEY=...
 ```
 
-Free tiers change often, so every model can be overridden with an environment variable (see [`.env.example`](.env.example)). `MAX_LLM_RUNS_PER_DAY` (default 30) keeps the site inside the free quotas. When the quota runs out, visitors are offered BYOK or the simulated buyer.
+Free tiers change often. Run `npx tsx scripts/check-providers.ts` to ping every configured model, and override any of them with an environment variable (see [`.env.example`](.env.example)). `MAX_LLM_RUNS_PER_DAY` (default 30) keeps the site inside the free quotas. When the quota runs out, visitors are offered BYOK or the simulated buyer.
 
 ## Run locally
 

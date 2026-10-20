@@ -2,6 +2,7 @@
  * Records the showcase replays bundled in server/featured/.
  *   npm run record            → simulated buyer (no keys needed)
  *   npm run record -- --llm   → real LLM buyer using the same env vars as the server
+ *   add --only=featured-fortress to record one show, --tries=3 to pick the best of 3 LLM runs
  * For each showcase it searches seeds for the most dramatic run that fits the story.
  */
 import fs from 'node:fs';
@@ -20,6 +21,7 @@ import { createEscrow } from '../server/escrow.ts';
 import { ProviderChain } from '../server/llm/client.ts';
 
 const useLlm = process.argv.includes('--llm');
+const only = process.argv.find((a) => a.startsWith('--only='))?.slice(7); // e.g. --only=featured-fortress
 const chain = new ProviderChain(config.providers);
 if (useLlm && !chain.available) throw new Error('--llm needs GROQ_API_KEY / GEMINI_API_KEY / OPENROUTER_API_KEY in the environment');
 const escrow = createEscrow(fs.mkdtempSync(path.join(os.tmpdir(), 'gauntlet-rec-')), null);
@@ -49,7 +51,7 @@ const SHOWS: Show[] = [
   {
     id: 'featured-fortress',
     title: 'The Fortress',
-    blurb: 'A paranoid agent catches a forged contract.',
+    blurb: 'A paranoid, patient agent. It still has to stay sharp.',
     scenario: 'gpu',
     preset: 'fortress',
     drama: (r) => (hasAttack(r, 'contract_tamper') ? 50 : 0) + r.score.total - landed(r) * 30,
@@ -68,10 +70,11 @@ const outDir = path.resolve('server/featured');
 fs.mkdirSync(outDir, { recursive: true });
 
 for (const show of SHOWS) {
+  if (only && show.id !== only) continue;
   const scenario = getScenario(show.scenario)!;
   const instructions = PRESETS.find((p) => p.id === show.preset)!.text;
   let best: { seed: string; r: RunResult; d: number } | null = null;
-  const tries = useLlm ? 1 : 120;
+  const tries = useLlm ? Number(process.argv.find((a) => a.startsWith('--tries='))?.slice(8) ?? 1) : 120;
   for (let i = 0; i < tries; i++) {
     const seed = `${show.id}-${i}`;
     const market = buildMarket(scenario, seed);
@@ -108,7 +111,8 @@ for (const show of SHOWS) {
     instructions,
     publishInstructions: true,
     events: r.events,
-    featured: { title: show.title, blurb: show.blurb },
+    // real-LLM outcomes vary, so the blurb only claims what actually happened
+    featured: { title: show.title, blurb: useLlm ? `${show.blurb.split('.')[0]}. ${r.score.verdict}` : show.blurb },
   };
   fs.writeFileSync(path.join(outDir, `${show.id}.json`), JSON.stringify(record));
   console.log(`${show.title.padEnd(14)} ${scenario.id.padEnd(8)} seed=${seed.padEnd(22)} score=${r.score.total} ${r.score.grade}  landed=${landed(r)}/${r.score.deployed}  ${r.score.verdict}`);

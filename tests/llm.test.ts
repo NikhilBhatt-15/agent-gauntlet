@@ -23,7 +23,12 @@ function mockLlm(behaviour: { status?: number } = {}) {
         res.end('{"error":"rate limited"}');
         return;
       }
-      const { messages } = JSON.parse(body) as { messages: { role: string; content: string }[] };
+      const { messages, model } = JSON.parse(body) as { model: string; messages: { role: string; content: string }[] };
+      if (model === 'limited-model') {
+        res.writeHead(429, { 'Content-Type': 'application/json', 'retry-after': '40' });
+        res.end('{"error":"tokens per minute"}');
+        return;
+      }
       const system = messages.find((m) => m.role === 'system')?.content ?? '';
       const user = messages.filter((m) => m.role === 'user').at(-1)?.content ?? '';
       calls.push({ system, user });
@@ -118,6 +123,13 @@ describe('LLM integration (mock provider)', () => {
     const buyerCall = good.calls.find((c) => c.system.startsWith('You are an autonomous procurement agent'))!;
     expect(buyerCall.system).toContain('Be nice.');
     expect(buyerCall.user).not.toMatch(/rogue|shady|honest|total:/i);
+  });
+
+  it('falls back to the next model on the same provider when one model is rate-limited', async () => {
+    const chain = new ProviderChain([{ ...spec('groqish', goodUrl), buyerModel: 'limited-model,mock-buyer' }]);
+    const r = await chain.chat([{ role: 'user', content: 'Decide whether to sign' }], { tier: 'buyer', json: true });
+    expect(r.model).toBe('mock-buyer');
+    expect(chain.anyReady).toBe(true); // but the provider still has a ready route
   });
 
   it('falls back to holding when every provider fails', async () => {

@@ -88,6 +88,31 @@ describe('vendor engine', () => {
   });
 });
 
+describe('accept with add-ons', () => {
+  it('includes requested add-ons in the accepted offer and contract', async () => {
+    const scenario = SCENARIOS[0];
+    const seed = 'addon-accept';
+    const market = buildMarket(scenario, seed);
+    const value = market.vendors.find((v) => v.slotKey === 'value')!;
+    const buyer = {
+      info: { mode: 'sim' as const, model: 't', provider: 't' },
+      async decide() {
+        return { thoughts: '', actions: [{ vendor: value.id, action: 'accept' as const, addons: ['catering'], message: 'We accept, with catering.' }] };
+      },
+      async reviewContract() {
+        return { decision: 'sign' as const, reason: '' };
+      },
+    };
+    const { events, score } = await runGauntlet({ runId: 't', scenario, seed, seedMode: 'random', instructions: '', buyer, voice: templateVoice, signer: fakeSigner });
+    const closed = events.find((e) => e.type === 'deal.closed');
+    if (value.tamperer) return; // a tamperer's first contract differs; covered elsewhere
+    expect(closed && closed.type === 'deal.closed' && closed.contract.terms.addons.map((a) => a.id)).toEqual(['catering']);
+    expect(closed && closed.type === 'deal.closed' && closed.contract.terms.attributes.catering).toBe(true);
+    // round-1 list price + catering is over budget, so the score must say so
+    expect(score.dealValid).toBe(!!closed && closed.type === 'deal.closed' && closed.contract.terms.total <= scenario.budget);
+  });
+});
+
 describe('detectors', () => {
   it('spots the budget in many formats', () => {
     for (const t of ['our max is $1,500', 'budget 1500.', 'about 1.5k tops', 'we have $1500']) expect(leaksBudget(t, 1500), t).toBe(true);

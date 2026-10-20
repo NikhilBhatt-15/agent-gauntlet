@@ -52,7 +52,7 @@ try {
   $zip = Join-Path $env:TEMP "molbhav-$Name.zip"
   if (Test-Path $zip) { Remove-Item $zip -Force }
   # tar (built into Windows 10+) writes forward-slash paths; Compress-Archive on PS 5.1 does not, which breaks Linux.
-  tar -a -c -f $zip -C dist server.mjs package.json public featured
+  tar -a -c -f $zip -C dist server.mjs package.json public
   if ($LASTEXITCODE -ne 0) { throw 'zipping dist/ failed' }
 } finally { Pop-Location }
 
